@@ -1,0 +1,21 @@
+2026-02-05 18:36:50 - cnn_trainer - [32mINFO[39m[49m[0m - train_model:428 - [32mLoading configurations...[39m[49m[0m
+2026-02-05 18:36:50 - cnn_trainer - [31mERROR[39m[49m[0m - train_model:458 - [31mError during training: Config file not found: C:\Users\Владелец\Desktop\ertelecom-project\ertelecom-project\boot_voice_detector\boot_voice_detector\config\audio_config.yaml[39m[49m[0m
+Traceback (most recent call last):
+  File "c:\Users\Владелец\Desktop\ertelecom-project\ertelecom-project\boot_voice_detector\scripts\train_model.py", line 429, in main
+    audio_config, model_config = load_configs()
+                                 ^^^^^^^^^^^^^^
+  File "c:\Users\Владелец\Desktop\ertelecom-project\ertelecom-project\boot_voice_detector\scripts\train_model.py", line 41, in load_configs
+    audio_config = config_loader.load_audio_config()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\Владелец\Desktop\ertelecom-project\ertelecom-project\boot_voice_detector\src\utils\config_loader.py", line 353, in load_audio_config
+    config = self.load_config(filename, validate=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\Владелец\Desktop\ertelecom-project\ertelecom-project\boot_voice_detector\src\utils\config_loader.py", line 259, in load_config
+    raise FileNotFoundError(f"Config file not found: {filepath}")
+FileNotFoundError: Config file not found: C:\Users\Владелец\Desktop\ertelecom-project\ertelecom-project\boot_voice_detector\boot_voice_detector\config\audio_config.yaml
+2026-02-05 18:49:46 - cnn_trainer - [32mINFO[39m[49m[0m - train_model:634 - [32mLoading configurations...[39m[49m[0m
+2026-02-05 18:49:46 - cnn_trainer - [32mINFO[39m[49m[0m - train_model:638 - [32mPreparing dataset...[39m[49m[0m
+2026-02-05 18:49:47 - cnn_trainer - [32mINFO[39m[49m[0m - train_model:189 - [32mFound 20761 audio files[39m[49m[0m
+2026-02-05 18:49:47 - cnn_trainer - [32mINFO[39m[49m[0m - train_model:195 - [32mUsing first 20 files for testing[39m[49m[0m
+2026-02-05 18:49:47 - cnn_trainer - [32mINFO[39m[49m[0m - train_model:204 - [32mExtracting spectrograms...[39m[49m[0m
+2026-02-05 18:49:50 - cnn_trainer - [32mINFO[39m[49m[0m - train_model:642 - [32mPreprocessing data...[39m[49m[0m
