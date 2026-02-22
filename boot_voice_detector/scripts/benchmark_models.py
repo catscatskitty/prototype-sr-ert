@@ -1,82 +1,135 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import torch
-import numpy as np
 import pandas as pd
+import numpy as np
 import time
 import psutil
-import gc
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from torch.utils.data import DataLoader
 from src.models.model_factory import ModelFactory
-from src.models.trainer import Trainer
-from scripts.data_preprocessing import load_and_prepare_data
+from src.models.predictor import Predictor
+from scripts.data_preprocessing import DataPreprocessor
+from sklearn.metrics import accuracy_score, f1_score
+import gc
 
 def benchmark_models():
-    device_input = input("Select device for benchmark (1: GPU/CUDA, 2: CPU): ")
+    os.makedirs('results', exist_ok=True)
     
-    if device_input == '2':
-        device = torch.device('cpu')
-        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-        print("CPU mode selected")
-    else:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        if not torch.cuda.is_available():
-            print("CUDA not available, falling back to CPU")
-            device = torch.device('cpu')
+    print("="*60)
+    print("BENCHMARKING MODELS")
+    print("="*60)
     
-    datasets, _ = load_and_prepare_data()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Device: {device}")
     
-    benchmark_results = []
+    preprocessor = DataPreprocessor()
+    _, _, test_loader, num_classes = preprocessor.prepare_data(batch_size=1)
+    
+    results = []
     
     for model_type in ['cnn', 'hybrid']:
-        for batch_size in [16, 32, 64]:
-            if model_type == 'cnn':
-                model = ModelFactory.create_model('cnn', input_dim=15, num_classes=2)
-                loader = DataLoader(datasets['cnn']['val'], batch_size=batch_size)
-            else:
-                model = ModelFactory.create_model('hybrid', spec_dim=15, manual_features_dim=4, num_classes=2)
-                loader = DataLoader(datasets['hybrid']['val'], batch_size=batch_size)
-            
-            model = model.to(device)
-            model.eval()
-            
-            if device.type == 'cuda':
-                torch.cuda.reset_peak_memory_stats()
-            
-            start_time = time.time()
-            with torch.no_grad():
-                for batch in loader:
-                    if len(batch) == 3:
-                        x1, x2, _ = batch
-                        x1 = x1.to(device)
-                        x2 = x2.to(device)
-                        _ = model(x1, x2)
-                    else:
-                        x, _ = batch
-                        x = x.to(device)
-                        _ = model(x)
-            
-            if device.type == 'cuda':
-                torch.cuda.synchronize()
-                memory = torch.cuda.max_memory_allocated() / 1024 / 1024
-            else:
-                memory = 0
-            
-            inference_time = time.time() - start_time
-            
-            benchmark_results.append({
-                'model': model_type,
-                'batch_size': batch_size,
-                'inference_time': inference_time,
-                'samples_per_sec': len(loader.dataset) / inference_time,
-                'memory_mb': memory,
-                'device': str(device)
-            })
+        print(f"\n{'-'*40}")
+        print(f"Benchmarking {model_type.upper()} model...")
+        print('-'*40)
+        
+        model_path = f'saved_models/{model_type}_final.pth'
+        if not os.path.exists(model_path):
+            print(f"Model {model_path} not found. Skipping...")
+            continue
+        
+        if model_type == 'cnn':
+            model = ModelFactory.get_model('cnn', input_dim=14, num_classes=num_classes)
+        else:
+            model = ModelFactory.get_model('hybrid', cnn_input_dim=14, feature_dim=5, num_classes=num_classes)
+        
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.eval()
+        predictor = Predictor(model, device)
+        
+        process = psutil.Process()
+        mem_before = process.memory_info().rss / 1024 / 1024
+        
+        if device.type == 'cuda':
+            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.synchronize()
+        
+        start_time = time.time()
+        all_preds = []
+        all_labels = []
+        
+        with torch.no_grad():
+            for i, batch in enumerate(test_loader):
+                if model_type == 'hybrid':
+                    cnn_input = batch['cnn_input'].to(device)
+                    lstm_input = batch['lstm_input'].to(device)
+                    hand_features = batch['hand_features'].to(device)
+                    outputs = model(cnn_input, lstm_input, hand_features)
+                else:
+                    inputs = batch['cnn_input'].to(device)
+                    outputs = model(inputs)
+                
+                preds = torch.argmax(outputs, dim=1)
+                all_preds.extend(preds.cpu().numpy())
+                all_labels.extend(batch['label'].numpy())
+                
+                # Диагностика первых 10 предсказаний
+                if i < 10:
+                    true_label = batch['label'].numpy()[0]
+                    pred_label = preds.cpu().numpy()[0]
+                    print(f"  Sample {i}: True={true_label} ({'real' if true_label==1 else 'fake'}), Pred={pred_label} ({'real' if pred_label==1 else 'fake'})")
+        
+        inference_time = time.time() - start_time
+        
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
+            gpu_memory = torch.cuda.max_memory_allocated() / 1024 / 1024
+        else:
+            gpu_memory = 0
+        
+        mem_after = process.memory_info().rss / 1024 / 1024
+        
+        if len(all_preds) > 0 and len(all_labels) > 0:
+            accuracy = accuracy_score(all_labels, all_preds)
+            f1 = f1_score(all_labels, all_preds, average='weighted')
+        else:
+            accuracy = 0.0
+            f1 = 0.0
+        
+        results.append({
+            'model_type': model_type,
+            'accuracy': accuracy,
+            'f1_score': f1,
+            'inference_time_sec': inference_time,
+            'samples_per_sec': len(test_loader.dataset) / inference_time if inference_time > 0 else 0,
+            'cpu_memory_mb': mem_after - mem_before,
+            'gpu_memory_mb': gpu_memory,
+            'device': str(device)
+        })
+        
+        print(f"  Accuracy: {accuracy:.4f}")
+        print(f"  F1-Score: {f1:.4f}")
+        print(f"  Inference Time: {inference_time:.4f}s")
+        print(f"  Samples/sec: {len(test_loader.dataset) / inference_time:.2f}")
+        print(f"  CPU Memory: {mem_after - mem_before:.2f} MB")
+        if gpu_memory > 0:
+            print(f"  GPU Memory: {gpu_memory:.2f} MB")
+        
+        del model, predictor
+        gc.collect()
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
     
-    pd.DataFrame(benchmark_results).to_csv('results/benchmark_results.csv', index=False)
-    print("\nBenchmark completed. Results saved.")
-    return benchmark_results
+    df = pd.DataFrame(results)
+    df.to_csv('results/benchmark_results.csv', index=False)
+    
+    print("\n" + "="*60)
+    print("BENCHMARK RESULTS")
+    print("="*60)
+    print(df.to_string(index=False))
+    print("\nResults saved to results/benchmark_results.csv")
+    
+    return df
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     benchmark_models()

@@ -4,14 +4,12 @@ from src.models.neural_networks.hybrid_model import HybridModel
 
 class ModelFactory:
     @staticmethod
-    def create_model(model_type, **kwargs):
+    def get_model(model_type, **kwargs):
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         if model_type == 'cnn':
-            return CNNModel(input_dim=kwargs.get('input_dim', 15), num_classes=kwargs.get('num_classes', 2))
+            model = CNNModel(**kwargs)
         elif model_type == 'hybrid':
-            return HybridModel(
-                spec_dim=kwargs.get('spec_dim', 15),
-                manual_features_dim=kwargs.get('manual_features_dim', 8),
-                num_classes=kwargs.get('num_classes', 2)
-            )
+            model = HybridModel(**kwargs)
         else:
-            raise ValueError(f"Unknown model type: {model_type}")
+            raise ValueError(f'Unknown model type: {model_type}')
+        return model.to(device)

@@ -1,76 +1,136 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import numpy as np
+from torch.cuda.amp import autocast, GradScaler
 from sklearn.metrics import accuracy_score, f1_score
 
 class Trainer:
-    def __init__(self, model, device, model_type='cnn'):
-        self.model = model.to(device)
+    def __init__(self, model, device, learning_rate=0.001, weight_decay=1e-5, patience=15):
+        self.model = model
         self.device = device
         self.criterion = nn.CrossEntropyLoss()
-        self.model_type = model_type
-        
-    def train_epoch(self, dataloader, optimizer):
+        self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=5)
+        self.scaler = GradScaler() if device.type == 'cuda' else None
+        self.patience = patience
+
+    def train_epoch(self, dataloader):
         self.model.train()
         total_loss = 0
-        batches = 0
+        
         for batch in dataloader:
-            if self.model_type == 'hybrid' and len(batch) == 3:
-                x_spec, x_feat, y = batch
-                x_spec = x_spec.to(self.device)
-                x_feat = x_feat.to(self.device)
-                y = y.to(self.device)
-                optimizer.zero_grad()
-                outputs = self.model(x_spec, x_feat)
-            else:
-                x, y = batch
-                x = x.to(self.device)
-                y = y.to(self.device)
-                optimizer.zero_grad()
-                outputs = self.model(x)
+            self.optimizer.zero_grad()
             
-            loss = self.criterion(outputs, y)
-            loss.backward()
-            optimizer.step()
+            if 'hybrid' in str(type(self.model)).lower():
+                cnn_input = batch['cnn_input'].to(self.device, non_blocking=True)
+                lstm_input = batch['lstm_input'].to(self.device, non_blocking=True)
+                hand_features = batch['hand_features'].to(self.device, non_blocking=True)
+                labels = batch['label'].to(self.device, non_blocking=True)
+                
+                if self.scaler:
+                    with autocast():
+                        outputs = self.model(cnn_input, lstm_input, hand_features)
+                        loss = self.criterion(outputs, labels)
+                    self.scaler.scale(loss).backward()
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    outputs = self.model(cnn_input, lstm_input, hand_features)
+                    loss = self.criterion(outputs, labels)
+                    loss.backward()
+                    self.optimizer.step()
+            else:
+                inputs = batch['cnn_input'].to(self.device, non_blocking=True)
+                labels = batch['label'].to(self.device, non_blocking=True)
+                
+                if self.scaler:
+                    with autocast():
+                        outputs = self.model(inputs)
+                        loss = self.criterion(outputs, labels)
+                    self.scaler.scale(loss).backward()
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    outputs = self.model(inputs)
+                    loss = self.criterion(outputs, labels)
+                    loss.backward()
+                    self.optimizer.step()
+            
             total_loss += loss.item()
-            batches += 1
-        return total_loss / batches
-    
+        
+        return total_loss / len(dataloader)
+
+    def train_fixed(self, train_loader, epochs):
+        for epoch in range(epochs):
+            train_loss = self.train_epoch(train_loader)
+            if (epoch + 1) % 10 == 0:
+                print(f'Epoch {epoch+1}/{epochs}, Loss: {train_loss:.4f}')
+        return epochs
+
+    def train(self, train_loader, val_loader, max_epochs=200):
+        best_loss = float('inf')
+        counter = 0
+        best_model_state = None
+        
+        for epoch in range(max_epochs):
+            train_loss = self.train_epoch(train_loader)
+            
+            val_loss = 0
+            self.model.eval()
+            with torch.no_grad():
+                for batch in val_loader:
+                    if 'hybrid' in str(type(self.model)).lower():
+                        cnn_input = batch['cnn_input'].to(self.device)
+                        lstm_input = batch['lstm_input'].to(self.device)
+                        hand_features = batch['hand_features'].to(self.device)
+                        labels = batch['label'].to(self.device)
+                        outputs = self.model(cnn_input, lstm_input, hand_features)
+                    else:
+                        inputs = batch['cnn_input'].to(self.device)
+                        labels = batch['label'].to(self.device)
+                        outputs = self.model(inputs)
+                    loss = self.criterion(outputs, labels)
+                    val_loss += loss.item()
+            val_loss /= len(val_loader)
+            
+            self.scheduler.step(val_loss)
+            
+            if val_loss < best_loss:
+                best_loss = val_loss
+                best_model_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
+                counter = 0
+            else:
+                counter += 1
+            
+            if (epoch + 1) % 10 == 0:
+                print(f'Epoch {epoch+1}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, LR: {self.optimizer.param_groups[0]["lr"]:.6f}')
+            
+            if self.patience and counter >= self.patience:
+                print(f'Early stopping at epoch {epoch+1}')
+                break
+        
+        if best_model_state:
+            self.model.load_state_dict({k: v.to(self.device) for k, v in best_model_state.items()})
+        
+        return epoch + 1
+
     def evaluate(self, dataloader):
         self.model.eval()
         all_preds = []
         all_labels = []
+        
         with torch.no_grad():
             for batch in dataloader:
-                if self.model_type == 'hybrid' and len(batch) == 3:
-                    x_spec, x_feat, y = batch
-                    x_spec = x_spec.to(self.device)
-                    x_feat = x_feat.to(self.device)
-                    outputs = self.model(x_spec, x_feat)
+                if 'hybrid' in str(type(self.model)).lower():
+                    cnn_input = batch['cnn_input'].to(self.device)
+                    lstm_input = batch['lstm_input'].to(self.device)
+                    hand_features = batch['hand_features'].to(self.device)
+                    outputs = self.model(cnn_input, lstm_input, hand_features)
                 else:
-                    x, y = batch
-                    x = x.to(self.device)
-                    outputs = self.model(x)
+                    inputs = batch['cnn_input'].to(self.device)
+                    outputs = self.model(inputs)
                 
-                _, preds = torch.max(outputs, 1)
+                preds = torch.argmax(outputs, dim=1)
                 all_preds.extend(preds.cpu().numpy())
-                all_labels.extend(y.numpy())
+                all_labels.extend(batch['label'].numpy())
         
-        acc = accuracy_score(all_labels, all_preds)
-        f1 = f1_score(all_labels, all_preds, average='weighted')
-        return acc, f1
-    
-    def train(self, train_loader, val_loader, epochs=10, lr=0.001):
-        optimizer = optim.Adam(self.model.parameters(), lr=lr)
-        history = {'train_loss': [], 'val_acc': [], 'val_f1': []}
-        
-        for epoch in range(epochs):
-            train_loss = self.train_epoch(train_loader, optimizer)
-            val_acc, val_f1 = self.evaluate(val_loader)
-            history['train_loss'].append(train_loss)
-            history['val_acc'].append(val_acc)
-            history['val_f1'].append(val_f1)
-            print(f"Epoch {epoch+1}/{epochs} - Loss: {train_loss:.4f}, Val Acc: {val_acc:.4f}, Val F1: {val_f1:.4f}")
-            
-        return history
+        return accuracy_score(all_labels, all_preds), f1_score(all_labels, all_preds, average='weighted')

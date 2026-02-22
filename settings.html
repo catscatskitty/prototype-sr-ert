@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройки — Speech Recognition</title>
+    <link rel="stylesheet" href="style_settings.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <!-- Шапка -->
+        <div class="header">
+            <h1 class="title">Настройки</h1>
+            <p class="subtitle">сириус.лето</p>
+        </div>
+
+        <!-- Блок настроек -->
+        <div class="settings-block">
+            <!-- Модель - выпадающий список -->
+            <div class="setting-item">
+                <span class="setting-label">Модель</span>
+                <select class="setting-select" id="modelSelect">
+                    <option value="hybrid" selected>Hybrid</option>
+                    <option value="cnn">CNN</option>
+                </select>
+            </div>
+
+            <!-- Канал связи - выпадающий список -->
+            <div class="setting-item">
+                <span class="setting-label">Канал связи</span>
+                <select class="setting-select" id="channelSelect">
+                    <option value="all" selected>Все</option>
+                </select>
+            </div>
+
+            <!-- Белый список - выпадающий список -->
+            <div class="setting-item">
+                <span class="setting-label">Белый список</span>
+                <select class="setting-select" id="whitelistSelect">
+                    <option value="no" selected>Нет</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Пустой spacer для прижатия навигации -->
+        <div class="spacer"></div>
+
+        <!-- Нижняя навигация -->
+        <div class="bottom-nav">
+            <!-- Настройки (активна - мы здесь) -->
+            <button class="nav-item active">
+                <span class="nav-icon">
+                    <img src="icons/Settings.png" alt="Настройеи" width="38" height="38">
+                </span>
+                <span class="nav-label">Настройки</span>
+            </button>
+
+            <!-- Главная (не активна) -->
+            <button class="nav-item" onclick="location.href='home.html'">
+                <span class="nav-icon">
+                    <img src="icons/Home.png" alt="Главная" width="38" height="38">
+                </span>
+                <span class="nav-label">Главная</span>
+            </button>
+        </div>
+
+    <script>
+        // Показываем название выбранной папки
+        document.getElementById('folderInput').addEventListener('change', function(e) {
+            if (this.files.length > 0) {
+                // Берем путь первого файла и показываем папку
+                const path = this.files[0].webkitRelativePath.split('/')[0];
+                document.getElementById('selectedFolder').textContent = '/' + path;
+            }
+        });
+    </script>
+</body>
+</html>

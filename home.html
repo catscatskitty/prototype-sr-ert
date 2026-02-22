@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Recognition</title>
+    <link rel="stylesheet" href="style_home.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <!-- Шапка -->
+        <div class="header">
+            <h1 class="title">Speech Recognition</h1>
+            <p class="subtitle">сириус.лето</p>
+        </div>
+
+        <!-- Блок статусов -->
+        <div class="status-block">
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span class="status-text">Статус соединения</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span class="status-text">Статус модуля APP</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span class="status-text">Статус модели</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span class="status-text">Статус белого списка</span>
+            </div>
+        </div>
+
+        <!-- Кнопка -->
+        <div class="file-upload-wrapper">
+            <input type="file" id="audioFileInput" accept=".wav,.mp3,.m4a,.flac" hidden>
+            <button class="folder-button" id="selectFileBtn">
+                <span class="button-text">Выбрать wav-аудиофайл</span>
+            </button>
+            <span id="fileNameDisplay" class="file-name-display"></span>
+        </div>
+
+        <!-- Нижняя навигация -->
+		<div class="bottom-nav">
+			<!-- Главная (активна - мы здесь) -->
+    		<button class="nav-item active">
+        		<span class="nav-icon">
+        			<img src="icons/Home.png" alt="Главная" width="38" height="38">
+        		</span>
+        		<span class="nav-label">Главная</span>
+    		</button>
+
+    		<!-- Настройки (не активна) -->
+    		<button class="nav-item" onclick="location.href='settings.html'">
+        		<span class="nav-icon">
+        			<img src="icons/Settings.png" alt="Настройки" width="38" height="38">
+        		</span>
+        		<span class="nav-label">Настройки</span>
+    		</button>
+		</div>
+    </div>
+
+    <script>
+        document.getElementById('selectFileBtn').addEventListener('click', function() {
+            document.getElementById('audioFileInput').click();
+        });
+
+        document.getElementById('audioFileInput').addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name;
+            if (fileName) {
+                document.getElementById('fileNameDisplay').textContent = '📄 ' + fileName;
+            }
+        });
+    </script>
+
+</body>
+</html>

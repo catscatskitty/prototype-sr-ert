@@ -1,13 +1,20 @@
 import torch
+import numpy as np
 
 class Predictor:
-    def __init__(self, model_path, device='cpu'):
+    def __init__(self, model, device):
+        self.model = model
         self.device = device
-        self.model = torch.load(model_path, map_location=device)
-        self.model.eval()
-    
+
     def predict(self, features):
+        self.model.eval()
         with torch.no_grad():
-            features_tensor = torch.tensor(features, dtype=torch.float32).to(self.device)
-            output = self.model(features_tensor)
-            return torch.argmax(output, dim=1).cpu().numpy()
+            if 'hybrid' in str(type(self.model)).lower():
+                cnn_input = torch.FloatTensor(features['cnn_input']).unsqueeze(0).to(self.device)
+                lstm_input = torch.FloatTensor(features['lstm_input']).unsqueeze(0).to(self.device)
+                hand_features = torch.FloatTensor(features['hand_features']).unsqueeze(0).to(self.device)
+                outputs = self.model(cnn_input, lstm_input, hand_features)
+            else:
+                inputs = torch.FloatTensor(features['cnn_input']).unsqueeze(0).to(self.device)
+                outputs = self.model(inputs)
+            return torch.softmax(outputs, dim=1).cpu().numpy()[0]

@@ -12,7 +12,7 @@ def show_structure(root='.', indent='', max_depth=3, current_depth=0):
             print(indent + '📁 ' + name + '/')
             if current_depth < max_depth:
                 show_structure(path, indent + '  ', max_depth, current_depth + 1)
-        elif any(name.endswith(ext) for ext in ['.csv', '.py', '.yml', '.yaml', '.txt', '.md', '.yaml']):
+        elif any(name.endswith(ext) for ext in ['.csv', '.py', '.yml', '.yaml', '.txt', '.md', '.yaml', '.yml', '.md', '.example']):
             emoji = '🐍' if name.endswith('.py') else '📄'
             print(indent + emoji + ' ' + name)
 show_structure()

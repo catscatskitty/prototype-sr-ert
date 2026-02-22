@@ -1,0 +1,208 @@
+/* ========== ОБЩИЕ СТИЛИ ========== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    /* Фон страницы - поменяй на свой из Figma */
+    background: #1e1e1e;
+    
+    /* Центрируем карточку */
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    /* Шрифт по умолчанию - поменяй на свой */
+    font-family: 'Montserrat', sans-serif;
+}
+
+/* ========== ГЛАВНАЯ КАРТОЧКА ========== */
+.app {
+    /* Размеры и фон карточки */
+    width: 360px;          /* ← поменяй ширину из Figma */
+    height: 825px;
+    background: #C2B4DF;      /* ← поменяй цвет фона */
+    border-radius: 60px;    /* ← поменяй скругление */
+    padding: 45px;          /* ← поменяй внутренние отступы */
+    margin: 0px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+/* ========== ШАПКА ========== */
+.header {
+    text-align: center;     /* выравнивание текста */
+    margin-bottom: 62px;    /* отступ снизу до статусов */
+}
+
+.title {
+    /* Текст "Speech Recognition" */
+    font-size: 32px;
+    font-weight: 500;
+    color: #000000;
+    margin-bottom: 10px;    /* ← отступ до subtitle */
+    line-height: 1.2;       /* ← межстрочный интервал */
+}
+
+.subtitle {
+    /* Текст "сириус.лето" */
+    font-size: 24px;
+    color: #000000;   
+    font-weight: 400;
+}
+
+/* ========== БЛОК СТАТУСОВ ========== */
+.status-block {
+    margin-bottom: 62px;    /* отступ до кнопки */
+}
+
+.status-item {
+    /* Каждая строка статуса */
+    display: flex;
+    align-items: center;    /* выравниваем по вертикали */
+    padding: 15px 0;        /* ← отступы сверху/снизу */
+}
+
+
+.status-dot {
+    /* Кружок статуса */
+    width: 10px;
+    height: 10px;
+    background: #E4727A;
+    border-radius: 50%;     /* делает круг */
+    margin-right: 12px;     /* ← отступ до текста */
+    
+    /* Если нужен другой цвет статуса - поменяй background */
+    /* Например: background: #82CF85; (зел.) */
+}
+
+.status-text {
+    /* Текст статуса */
+    font-size: 16px;        /* ← из Figma */
+    color: #000000;         /* ← цвет текста */
+}
+
+/* ========== КНОПКА ========== */
+.folder-button {
+    /* Кнопка на всю ширину */
+    width: 100%;
+    border: none;           /* убираем рамку */
+    border-radius: 12px;
+    padding: 4px 30px;     /* ← отступы внутри кнопки */
+    
+    /* Цвета */
+    background: #B9A9DA;    /* ← фоновый цвет из Figma */
+    color: black;           /* ← цвет текста */
+    
+    /* Текст */
+    font-size: 24px;        /* ← размер шрифта */
+    font-weight: 500;       /* ← жирность */
+    
+    
+    /* Курсор */
+    cursor: pointer;
+    
+    /* Плавные переходы */
+    transition: all 0.3s ease;
+}
+
+/* Эффект при наведении */
+.folder-button:hover {
+    background: #B29BE3;    /* ← цвет при наведении */
+    transform: translateY(-2px);  /* ← легкое поднятие */
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+}
+
+/* Эффект при нажатии */
+.folder-button:active {
+    transform: translateY(0);
+}
+
+.button-icon {
+    font-size: 20px;        /* ← размер иконки */
+    line-height: 1;
+}
+
+.button-text {
+    line-height: 1;
+}
+
+
+.bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin-top: 130px;
+    padding-top: 20px;
+}
+
+.nav-item {
+    background: none;        /* убираем фон */
+    border: none;            /* убираем рамку */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.3s;
+    padding: 8px 16px;       /* добавил отступы для удобства клика */
+    font-family: 'Montserrat', sans-serif;
+}
+
+.nav-item.active {
+    opacity: 1;
+}
+
+.nav-item.active .nav-icon {
+    transform: scale(1.1);
+}
+
+.nav-icon {
+    font-size: 24px;
+    transition: transform 0.3s;
+}
+
+.nav-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #4a5568;
+}
+
+.nav-item.active .nav-label {
+    color: #667eea;
+    font-weight: 600;
+}
+
+.nav-item:hover {
+    opacity: 0.8;
+    cursor: pointer;
+}
+
+.file-upload-wrapper {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.file-name-display {
+    display: block;
+    margin-top: 8px;
+    font-size: 14px;
+    color: #000000;
+    opacity: 0.7;
+    text-align: center;
+}
+
+/* ========== АДАПТАЦИЯ ДЛЯ ТЕЛЕФОНОВ ========== */
+@media (max-width: 600px) {
+    .app {
+        width: 90%;         /* на телефоне карточка уже */
+        padding: 30px 20px; /* меньше отступы */
+    }
+    
+    .title {
+        font-size: 24px;    /* текст поменьше */
+    }
+}
