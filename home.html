@@ -17,67 +17,105 @@
             <p class="subtitle">сириус.лето</p>
         </div>
 
-        <!-- Блок статусов -->
-        <div class="status-block">
-            <div class="status-item">
-                <span class="status-dot"></span>
-                <span class="status-text">Статус соединения</span>
+        <!-- ===== ФРЕЙМ 1: ЗАГРУЗКА ФАЙЛА ===== -->
+        <div class="frame frame-upload" id="frameUpload">
+            <!-- Кнопка выбора файла -->
+            <div class="file-upload-wrapper">
+                <input type="file" id="audioFileInput" accept="audio/*" hidden>
+                <button class="folder-button" id="selectFileBtn">
+                    <span class="button-text">Выбрать wav-аудиофайл</span>
+                </button>
+                <span id="fileNameDisplay" class="file-name-display"></span>
             </div>
-            <div class="status-item">
-                <span class="status-dot"></span>
-                <span class="status-text">Статус модуля APP</span>
+
+            <!-- Кнопка анализа (появляется после выбора файла) -->
+            <button class="analyze-button" id="analyzeBtn" style="display: none;">
+                <span class="button-text">🔍 Анализировать</span>
+            </button>
+        </div>
+
+        <!-- ===== ФРЕЙМ 2: ПРОЦЕСС АНАЛИЗА ===== -->
+        <div class="frame frame-processing" id="frameProcessing" style="display: none;">
+            <h2 class="frame-title">Использование</h2>
+            
+            <!-- Визуализация (спектрограмма) с прогрессом -->
+            <div class="visualization" id="visualization">
+                <div class="spectrogram-container" id="spectrogramContainer">
+                    <img src="icons/Waveform.png" alt="Спектрограмма" class="spectrogram-icon" id="spectrogramIcon">
+                    <div class="spectrogram-progress-bar" id="spectrogramProgressBar"></div>
+                </div>
+                
+                <!-- Время под спектрограммой -->
+                <div class="spectrogram-time">
+                    <span id="currentTimeDisplay">0:00</span>
+                    <span>/</span>
+                    <span id="totalTimeDisplay">0:00</span>
+                </div>
             </div>
-            <div class="status-item">
-                <span class="status-dot"></span>
-                <span class="status-text">Статус модели</span>
-            </div>
-            <div class="status-item">
-                <span class="status-dot"></span>
-                <span class="status-text">Статус белого списка</span>
+
+            <!-- Скрытый аудиоплеер (для воспроизведения) -->
+            <audio id="audioPlayer" style="display: none;"></audio>
+
+            <!-- Кнопка обработки -->
+            <button class="process-button" id="processBtn">
+                <span class="button-text">⚙️ Обработать</span>
+            </button>
+
+            <!-- Прогресс обработки -->
+            <div class="processing-status" id="processingStatus" style="display: none;">
+                <div class="status-item">
+                    <span class="status-dot processing-dot"></span>
+                    <span class="status-text">Обработка...</span>
+                </div>
+                <div class="progress-bar processing-bar">
+                    <div class="progress-fill" id="processingProgress" style="width: 0%"></div>
+                </div>
             </div>
         </div>
 
-        <!-- Кнопка -->
-        <div class="file-upload-wrapper">
-            <input type="file" id="audioFileInput" accept=".wav,.mp3,.m4a,.flac" hidden>
-            <button class="folder-button" id="selectFileBtn">
-                <span class="button-text">Выбрать wav-аудиофайл</span>
-            </button>
-            <span id="fileNameDisplay" class="file-name-display"></span>
+        <!-- ===== ФРЕЙМ 3: РЕЗУЛЬТАТ ===== -->
+        <div class="frame frame-result" id="frameResult" style="display: none;">
+            <!-- Результат FAKE -->
+            <div class="result-fake" id="resultFake" style="display: none;">
+                <h2 class="result-title">Готово (Fake)</h2>
+                <div class="result-icon">
+                    <img src="icons/fake-icon.png" alt="Fake" width="80" height="80">
+                </div>
+                <p class="result-text">ИСПОЛЬЗОВАННЫЙ РОБОТ</p>
+                <button class="details-button">Подробности</button>
+            </div>
+
+            <!-- Результат REAL -->
+            <div class="result-real" id="resultReal" style="display: none;">
+                <h2 class="result-title">Готово (Real)</h2>
+                <div class="result-icon">
+                    <img src="icons/real-icon.png" alt="Real" width="80" height="80">
+                </div>
+                <p class="result-text">НАТУРАЛЬНЫЙ РОБОТ</p>
+                <button class="details-button">Подробности</button>
+            </div>
         </div>
 
         <!-- Нижняя навигация -->
-		<div class="bottom-nav">
-			<!-- Главная (активна - мы здесь) -->
-    		<button class="nav-item active">
-        		<span class="nav-icon">
-        			<img src="icons/Home.png" alt="Главная" width="38" height="38">
-        		</span>
-        		<span class="nav-label">Главная</span>
-    		</button>
+        <div class="bottom-nav">
+            <!-- Главная (активна - мы здесь) -->
+            <button class="nav-item active" id="homeNavBtn">
+                <span class="nav-icon">
+                    <img src="icons/Home.png" alt="Главная" width="38" height="38">
+                </span>
+                <span class="nav-label">Главная</span>
+            </button>
 
-    		<!-- Настройки (не активна) -->
-    		<button class="nav-item" onclick="location.href='settings.html'">
-        		<span class="nav-icon">
-        			<img src="icons/Settings.png" alt="Настройки" width="38" height="38">
-        		</span>
-        		<span class="nav-label">Настройки</span>
-    		</button>
-		</div>
+            <!-- Настройки -->
+            <button class="nav-item" onclick="location.href='settings.html'">
+                <span class="nav-icon">
+                    <img src="icons/Settings.png" alt="Настройки" width="38" height="38">
+                </span>
+                <span class="nav-label">Настройки</span>
+            </button>
+        </div>
     </div>
 
-    <script>
-        document.getElementById('selectFileBtn').addEventListener('click', function() {
-            document.getElementById('audioFileInput').click();
-        });
-
-        document.getElementById('audioFileInput').addEventListener('change', function(e) {
-            const fileName = e.target.files[0]?.name;
-            if (fileName) {
-                document.getElementById('fileNameDisplay').textContent = '📄 ' + fileName;
-            }
-        });
-    </script>
-
+    <script src="home.js"></script>
 </body>
 </html>
