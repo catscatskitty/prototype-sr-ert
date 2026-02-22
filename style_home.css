@@ -6,141 +6,317 @@
 }
 
 body {
-    /* Фон страницы - поменяй на свой из Figma */
     background: #1e1e1e;
-    
-    /* Центрируем карточку */
     min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    
-    /* Шрифт по умолчанию - поменяй на свой */
     font-family: 'Montserrat', sans-serif;
 }
 
 /* ========== ГЛАВНАЯ КАРТОЧКА ========== */
 .app {
-    /* Размеры и фон карточки */
-    width: 360px;          /* ← поменяй ширину из Figma */
+    width: 360px;
     height: 825px;
-    background: #C2B4DF;      /* ← поменяй цвет фона */
-    border-radius: 60px;    /* ← поменяй скругление */
-    padding: 45px;          /* ← поменяй внутренние отступы */
+    background: #C2B4DF;
+    border-radius: 60px;
+    padding: 45px;
     margin: 0px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
 }
 
 /* ========== ШАПКА ========== */
 .header {
-    text-align: center;     /* выравнивание текста */
-    margin-bottom: 62px;    /* отступ снизу до статусов */
+    text-align: center;
+    margin-bottom: 30px;
+    flex-shrink: 0;
 }
 
 .title {
-    /* Текст "Speech Recognition" */
     font-size: 32px;
     font-weight: 500;
     color: #000000;
-    margin-bottom: 10px;    /* ← отступ до subtitle */
-    line-height: 1.2;       /* ← межстрочный интервал */
+    margin-bottom: 10px;
+    line-height: 1.2;
 }
 
 .subtitle {
-    /* Текст "сириус.лето" */
     font-size: 24px;
     color: #000000;   
     font-weight: 400;
 }
 
-/* ========== БЛОК СТАТУСОВ ========== */
-.status-block {
-    margin-bottom: 62px;    /* отступ до кнопки */
-}
-
-.status-item {
-    /* Каждая строка статуса */
+/* ========== ФРЕЙМЫ ========== */
+.frame {
+    flex: 1;
     display: flex;
-    align-items: center;    /* выравниваем по вертикали */
-    padding: 15px 0;        /* ← отступы сверху/снизу */
-}
-
-
-.status-dot {
-    /* Кружок статуса */
-    width: 10px;
-    height: 10px;
-    background: #E4727A;
-    border-radius: 50%;     /* делает круг */
-    margin-right: 12px;     /* ← отступ до текста */
-    
-    /* Если нужен другой цвет статуса - поменяй background */
-    /* Например: background: #82CF85; (зел.) */
-}
-
-.status-text {
-    /* Текст статуса */
-    font-size: 16px;        /* ← из Figma */
-    color: #000000;         /* ← цвет текста */
-}
-
-/* ========== КНОПКА ========== */
-.folder-button {
-    /* Кнопка на всю ширину */
+    flex-direction: column;
     width: 100%;
-    border: none;           /* убираем рамку */
-    border-radius: 12px;
-    padding: 4px 30px;     /* ← отступы внутри кнопки */
-    
-    /* Цвета */
-    background: #B9A9DA;    /* ← фоновый цвет из Figma */
-    color: black;           /* ← цвет текста */
-    
-    /* Текст */
-    font-size: 24px;        /* ← размер шрифта */
-    font-weight: 500;       /* ← жирность */
-    
-    
-    /* Курсор */
+    margin-bottom: 20px;
+}
+
+.frame-title {
+    font-size: 24px;
+    font-weight: 500;
+    color: #000000;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+/* ===== ФРЕЙМ 1: ЗАГРУЗКА ФАЙЛА ===== */
+.file-upload-wrapper {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.folder-button {
+    width: 100%;
+    border: none;
+    border-radius: 40px;
+    padding: 15px 30px;
+    background: #B9A9DA;
+    color: black;
+    font-size: 20px;
+    font-weight: 500;
     cursor: pointer;
-    
-    /* Плавные переходы */
     transition: all 0.3s ease;
+    font-family: 'Montserrat', sans-serif;
 }
 
-/* Эффект при наведении */
 .folder-button:hover {
-    background: #B29BE3;    /* ← цвет при наведении */
-    transform: translateY(-2px);  /* ← легкое поднятие */
-    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+    background: #B29BE3;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
 }
 
-/* Эффект при нажатии */
 .folder-button:active {
     transform: translateY(0);
 }
 
-.button-icon {
-    font-size: 20px;        /* ← размер иконки */
-    line-height: 1;
+.file-name-display {
+    display: block;
+    margin-top: 12px;
+    font-size: 14px;
+    color: #000000;
+    opacity: 0.7;
+    text-align: center;
 }
 
-.button-text {
-    line-height: 1;
+.analyze-button {
+    width: 100%;
+    background: #B9A9DA;
+    border: none;
+    border-radius: 40px;
+    padding: 15px;
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 20px;
+    font-family: 'Montserrat', sans-serif;
 }
 
+.analyze-button:hover {
+    background: #B29BE3;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
 
+/* ===== ФРЕЙМ 2: ПРОЦЕСС АНАЛИЗА ===== */
+.visualization {
+    background: #B9A9DA;
+    border-radius: 40px;
+    padding: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.spectrogram-icon {
+    width: 100%;
+    max-width: 200px;
+    transition: opacity 0.3s;
+}
+
+/* Плеер */
+.custom-player {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #B9A9DA;
+    border-radius: 40px;
+    padding: 12px 20px;
+    margin-bottom: 20px;
+}
+
+.play-button {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    color: #000000;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #667eea;
+    border-radius: 10px;
+    transition: width 0.1s;
+}
+
+.time-display {
+    font-size: 14px;
+    color: #000000;
+    min-width: 80px;
+}
+
+.process-button {
+    width: 100%;
+    background: #B9A9DA;
+    border: none;
+    border-radius: 40px;
+    padding: 15px;
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-bottom: 20px;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.process-button:hover {
+    background: #B29BE3;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+/* Прогресс обработки */
+.processing-status {
+    margin-top: 10px;
+}
+
+.processing-bar {
+    margin-top: 10px;
+}
+
+.processing-dot {
+    background: #fbbf24;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* ===== ФРЕЙМ 3: РЕЗУЛЬТАТ ===== */
+.result-fake, .result-real {
+    text-align: center;
+    padding: 30px 20px;
+    background: #B9A9DA;
+    border-radius: 40px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.result-title {
+    font-size: 24px;
+    font-weight: 500;
+    color: #000000;
+    margin-bottom: 20px;
+}
+
+.result-icon {
+    margin: 20px 0;
+}
+
+.result-text {
+    font-size: 18px;
+    font-weight: 500;
+    color: #000000;
+    margin-bottom: 30px;
+}
+
+.details-button {
+    background: #667eea;
+    border: none;
+    border-radius: 40px;
+    padding: 12px 30px;
+    font-size: 16px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.details-button:hover {
+    background: #5a67d8;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+/* ========== БЛОК СТАТУСОВ ========== */
+.status-block {
+    margin-bottom: 20px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    background: #E4727A;
+    border-radius: 50%;
+    margin-right: 12px;
+}
+
+.status-text {
+    font-size: 16px;
+    color: #000000;
+}
+
+/* ========== НИЖНЯЯ НАВИГАЦИЯ ========== */
 .bottom-nav {
     display: flex;
     justify-content: space-around;
     align-items: center;
-    margin-top: 130px;
+    margin-top: auto;
     padding-top: 20px;
+    flex-shrink: 0;
 }
 
 .nav-item {
-    background: none;        /* убираем фон */
-    border: none;            /* убираем рамку */
+    background: none;
+    border: none;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -148,7 +324,7 @@ body {
     cursor: pointer;
     opacity: 0.6;
     transition: opacity 0.3s;
-    padding: 8px 16px;       /* добавил отступы для удобства клика */
+    padding: 8px 16px;
     font-family: 'Montserrat', sans-serif;
 }
 
@@ -161,14 +337,13 @@ body {
 }
 
 .nav-icon {
-    font-size: 24px;
     transition: transform 0.3s;
 }
 
 .nav-label {
     font-size: 12px;
     font-weight: 500;
-    color: #4a5568;
+    color: #000000;
 }
 
 .nav-item.active .nav-label {
@@ -178,31 +353,76 @@ body {
 
 .nav-item:hover {
     opacity: 0.8;
-    cursor: pointer;
 }
 
-.file-upload-wrapper {
+
+/* ===== СПЕКТРОГРАММА С ПРОГРЕССОМ ===== */
+.spectrogram-container {
+    position: relative;
     width: 100%;
-    margin-bottom: 20px;
+    cursor: pointer;
+    border-radius: 20px;
+    overflow: hidden;
 }
 
-.file-name-display {
+.spectrogram-icon {
+    width: 100%;
     display: block;
+    border-radius: 20px;
+}
+
+.spectrogram-progress-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, 
+        rgba(102, 126, 234, 0.2) 0%, 
+        rgba(102, 126, 234, 0.4) 50%, 
+        rgba(102, 126, 234, 0.6) 100%);
+    border-right: 3px solid #667eea;
+    transition: width 0.1s linear;
+    pointer-events: none;
+    box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
+}
+
+.spectrogram-time {
+    display: flex;
+    justify-content: space-between;
     margin-top: 8px;
     font-size: 14px;
     color: #000000;
-    opacity: 0.7;
+    font-weight: 500;
+}
+
+.visualization {
+    background: #B9A9DA;
+    border-radius: 40px;
+    padding: 20px;
+    margin-bottom: 20px;
     text-align: center;
 }
 
 /* ========== АДАПТАЦИЯ ДЛЯ ТЕЛЕФОНОВ ========== */
 @media (max-width: 600px) {
     .app {
-        width: 90%;         /* на телефоне карточка уже */
-        padding: 30px 20px; /* меньше отступы */
+        width: 90%;
+        padding: 30px 20px;
+        height: auto;
+        min-height: 800px;
     }
     
     .title {
-        font-size: 24px;    /* текст поменьше */
+        font-size: 24px;
+    }
+    
+    .subtitle {
+        font-size: 18px;
+    }
+    
+    .folder-button, .analyze-button, .process-button {
+        font-size: 18px;
+        padding: 12px 20px;
     }
 }
