@@ -1,6 +1,2 @@
-from src.models.ensemble import EnsembleModel
-from src.models.model_factory import ModelFactory
-from src.models.neural_networks.cnn_model import CNNModel
-from src.models.neural_networks.hybrid_model import HybridModel
-from src.models.predictor import Predictor
-from src.models.trainer import Trainer
+# src/models/__init__.py
+from .neural_networks.cnn_model import CNN1D

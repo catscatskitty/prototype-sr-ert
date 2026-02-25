@@ -1,14 +1,13 @@
-FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+# Dockerfile
+FROM pytorch/pytorch:2.0.1-cuda11.8-cudnn8-runtime
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt flask gunicorn
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p saved_models results static
-
 EXPOSE 5000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "api.app:app"]
+CMD ["python", "api/app.py"]

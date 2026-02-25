@@ -1,136 +1,80 @@
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast, GradScaler
+import torch.optim as optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
-class Trainer:
-    def __init__(self, model, device, learning_rate=0.001, weight_decay=1e-5, patience=15):
-        self.model = model
+class ModelTrainer:
+    def __init__(self, model, device, lr=0.001):
+        self.model = model.to(device)
         self.device = device
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=5)
-        self.scaler = GradScaler() if device.type == 'cuda' else None
-        self.patience = patience
-
-    def train_epoch(self, dataloader):
+        self.optimizer = optim.Adam(model.parameters(), lr=lr)
+        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', patience=5)
+        self.history = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
+        
+    def train_epoch(self, loader):
         self.model.train()
-        total_loss = 0
+        losses = []
+        preds = []
+        labels = []
         
-        for batch in dataloader:
+        for inputs, targets in loader:
+            inputs, targets = inputs.to(self.device), targets.to(self.device)
             self.optimizer.zero_grad()
+            outputs = self.model(inputs)
+            loss = self.criterion(outputs, targets)
+            loss.backward()
+            self.optimizer.step()
             
-            if 'hybrid' in str(type(self.model)).lower():
-                cnn_input = batch['cnn_input'].to(self.device, non_blocking=True)
-                lstm_input = batch['lstm_input'].to(self.device, non_blocking=True)
-                hand_features = batch['hand_features'].to(self.device, non_blocking=True)
-                labels = batch['label'].to(self.device, non_blocking=True)
-                
-                if self.scaler:
-                    with autocast():
-                        outputs = self.model(cnn_input, lstm_input, hand_features)
-                        loss = self.criterion(outputs, labels)
-                    self.scaler.scale(loss).backward()
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                else:
-                    outputs = self.model(cnn_input, lstm_input, hand_features)
-                    loss = self.criterion(outputs, labels)
-                    loss.backward()
-                    self.optimizer.step()
-            else:
-                inputs = batch['cnn_input'].to(self.device, non_blocking=True)
-                labels = batch['label'].to(self.device, non_blocking=True)
-                
-                if self.scaler:
-                    with autocast():
-                        outputs = self.model(inputs)
-                        loss = self.criterion(outputs, labels)
-                    self.scaler.scale(loss).backward()
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                else:
-                    outputs = self.model(inputs)
-                    loss = self.criterion(outputs, labels)
-                    loss.backward()
-                    self.optimizer.step()
-            
-            total_loss += loss.item()
+            losses.append(loss.item())
+            preds.extend(torch.argmax(outputs, dim=1).cpu().numpy())
+            labels.extend(targets.cpu().numpy())
         
-        return total_loss / len(dataloader)
-
-    def train_fixed(self, train_loader, epochs):
+        return np.mean(losses), accuracy_score(labels, preds), f1_score(labels, preds, average='weighted')
+    
+    def validate(self, loader):
+        self.model.eval()
+        losses = []
+        preds = []
+        labels = []
+        
+        with torch.no_grad():
+            for inputs, targets in loader:
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, targets)
+                
+                losses.append(loss.item())
+                preds.extend(torch.argmax(outputs, dim=1).cpu().numpy())
+                labels.extend(targets.cpu().numpy())
+        
+        return np.mean(losses), accuracy_score(labels, preds), f1_score(labels, preds, average='weighted')
+    
+    def train(self, train_loader, val_loader, epochs=100, patience=10):
+        best_val_loss = float('inf')
+        patience_counter = 0
+        
         for epoch in range(epochs):
-            train_loss = self.train_epoch(train_loader)
-            if (epoch + 1) % 10 == 0:
-                print(f'Epoch {epoch+1}/{epochs}, Loss: {train_loss:.4f}')
-        return epochs
-
-    def train(self, train_loader, val_loader, max_epochs=200):
-        best_loss = float('inf')
-        counter = 0
-        best_model_state = None
-        
-        for epoch in range(max_epochs):
-            train_loss = self.train_epoch(train_loader)
+            train_loss, train_acc, train_f1 = self.train_epoch(train_loader)
+            val_loss, val_acc, val_f1 = self.validate(val_loader)
             
-            val_loss = 0
-            self.model.eval()
-            with torch.no_grad():
-                for batch in val_loader:
-                    if 'hybrid' in str(type(self.model)).lower():
-                        cnn_input = batch['cnn_input'].to(self.device)
-                        lstm_input = batch['lstm_input'].to(self.device)
-                        hand_features = batch['hand_features'].to(self.device)
-                        labels = batch['label'].to(self.device)
-                        outputs = self.model(cnn_input, lstm_input, hand_features)
-                    else:
-                        inputs = batch['cnn_input'].to(self.device)
-                        labels = batch['label'].to(self.device)
-                        outputs = self.model(inputs)
-                    loss = self.criterion(outputs, labels)
-                    val_loss += loss.item()
-            val_loss /= len(val_loader)
+            self.history['train_loss'].append(train_loss)
+            self.history['val_loss'].append(val_loss)
+            self.history['train_acc'].append(train_acc)
+            self.history['val_acc'].append(val_acc)
             
             self.scheduler.step(val_loss)
             
-            if val_loss < best_loss:
-                best_loss = val_loss
-                best_model_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
-                counter = 0
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                patience_counter = 0
+                torch.save(self.model.state_dict(), 'saved_models/best_model.pth')
             else:
-                counter += 1
-            
-            if (epoch + 1) % 10 == 0:
-                print(f'Epoch {epoch+1}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, LR: {self.optimizer.param_groups[0]["lr"]:.6f}')
-            
-            if self.patience and counter >= self.patience:
-                print(f'Early stopping at epoch {epoch+1}')
-                break
+                patience_counter += 1
+                if patience_counter >= patience:
+                    print(f'Early stopping at epoch {epoch+1}')
+                    break
         
-        if best_model_state:
-            self.model.load_state_dict({k: v.to(self.device) for k, v in best_model_state.items()})
-        
-        return epoch + 1
-
-    def evaluate(self, dataloader):
-        self.model.eval()
-        all_preds = []
-        all_labels = []
-        
-        with torch.no_grad():
-            for batch in dataloader:
-                if 'hybrid' in str(type(self.model)).lower():
-                    cnn_input = batch['cnn_input'].to(self.device)
-                    lstm_input = batch['lstm_input'].to(self.device)
-                    hand_features = batch['hand_features'].to(self.device)
-                    outputs = self.model(cnn_input, lstm_input, hand_features)
-                else:
-                    inputs = batch['cnn_input'].to(self.device)
-                    outputs = self.model(inputs)
-                
-                preds = torch.argmax(outputs, dim=1)
-                all_preds.extend(preds.cpu().numpy())
-                all_labels.extend(batch['label'].numpy())
-        
-        return accuracy_score(all_labels, all_preds), f1_score(all_labels, all_preds, average='weighted')
+        return self.history

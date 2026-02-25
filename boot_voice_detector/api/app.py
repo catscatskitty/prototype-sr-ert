@@ -1,247 +1,313 @@
-import sys
+# api/app.py (обновленная версия для предсказаний)
+from flask import Flask, request, jsonify, render_template, send_from_directory
+import torch
+import numpy as np
 import os
+import sys
+import librosa
+import tempfile
+import pickle
+import pandas as pd
+from werkzeug.utils import secure_filename
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import matplotlib
-matplotlib.use('Agg')
-
-from flask import Flask, request, jsonify, render_template
-import torch
-import pandas as pd
-import numpy as np
-from src.models.model_factory import ModelFactory
-from src.models.predictor import Predictor
-from scripts.data_preprocessing import DataPreprocessor
-from scripts.benchmark_models import benchmark_models
-from scripts.compare_models import compare_models
-import base64
-import time
-from datetime import datetime
+from src.utils.device_utils import get_device
+from src.models.neural_networks.cnn_model import CNN1D
+from src.feature_ex.feature_extractor import FeatureExtractor
+from src.feature_ex.linguistic_analyzer import LinguisticAnalyzer
 
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
-preprocessor = DataPreprocessor()
-models = {}
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 
-# Цвета для вывода
-class Colors:
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    END = '\033[0m'
-    BOLD = '\033[1m'
+device = get_device()
 
-def print_logo():
-    logo = f"""
-{Colors.BLUE}{Colors.BOLD}
-╔════════════════════════════════════════════════════════════╗
-║         AUDIO DEEPFAKE DETECTION SYSTEM v1.0              ║
-║                    REST API SERVER                         ║
-╚════════════════════════════════════════════════════════════╝
-{Colors.END}"""
-    print(logo)
+# Feature column definitions (must match training)
+SPEC_FEATURE_COLS = [
+    "mel_mean",
+    "mel_std",
+    "mel_max",
+    "mel_min",
+    "energy",
+    "duration",
+    "mfcc1_mean",
+    "mfcc1_std",
+    "mfcc2_mean",
+    "mfcc2_std",
+    "mfcc3_mean",
+    "mfcc3_std",
+    "mfcc4_mean",
+    "mfcc4_std",
+]
+VAD_FEATURE_COLS = ["duration_sec", "speech_ratio", "snr_db", "speech_duration_sec"]
+LING_FEATURE_COLS = [
+    "word_count",
+    "char_count",
+    "vowel_count",
+    "consonant_count",
+    "avg_word_length",
+    "has_cyrillic",
+    "has_latin",
+]
 
-def print_request_info(endpoint, method, status="OK"):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    color = Colors.GREEN if status == "OK" else Colors.RED
-    print(f"{Colors.BOLD}{timestamp}{Colors.END} | {Colors.BLUE}{method:7}{Colors.END} | {color}{endpoint:25}{Colors.END} | {color}{status}{Colors.END}")
+# Input dimension must match the total feature vector length used in training:
+# 14 acoustic + 4 VAD/SNR + 7 linguistic = 25
+input_dim = len(SPEC_FEATURE_COLS) + len(VAD_FEATURE_COLS) + len(LING_FEATURE_COLS)
+model = CNN1D(input_dim=input_dim).to(device)
+model_path = 'saved_models/best_cnn_model.pth'
+scaler_path = 'saved_models/scaler.pkl'
 
-def print_model_info(model_type, action):
-    icons = {
-        'train': '🚀',
-        'predict': '🔮',
-        'load': '📦',
-        'save': '💾',
-        'benchmark': '📊'
-    }
-    icon = icons.get(action, '•')
-    print(f"{Colors.YELLOW}{icon} [{model_type.upper()}]{Colors.END} {action}")
+scaler = None
+feature_extractor = FeatureExtractor()
+linguistic_analyzer = LinguisticAnalyzer()
+DECISION_THRESHOLD = 0.5
+
+# In-memory lookup tables for precomputed CSV features
+csv_features_df = None
+csv_by_filename = None
+csv_by_relpath = None
+
+if os.path.exists(model_path):
+    checkpoint = torch.load(model_path, map_location=device)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+        print(f"Loaded model checkpoint from epoch: {checkpoint.get('epoch', 'unknown')} "
+              f"with val_acc={checkpoint.get('val_acc', 'unknown')}")
+        if 'decision_threshold' in checkpoint:
+            DECISION_THRESHOLD = float(checkpoint['decision_threshold'])
+            print(f"Using learned decision threshold from training: {DECISION_THRESHOLD:.3f}")
+    else:
+        model.load_state_dict(checkpoint)
+    print(f"Model loaded successfully on {device}")
+else:
+    print("No trained model found. Please run training first.")
+
+if os.path.exists(scaler_path):
+    with open(scaler_path, "rb") as f:
+        scaler = pickle.load(f)
+    print("Loaded feature scaler for inference.")
+else:
+    print("Warning: scaler.pkl not found; API will use unscaled features, which may reduce accuracy.")
+
+# Allow manual override of decision threshold via environment variable for quick tuning.
+thr_env = os.environ.get("FAKE_DECISION_THRESHOLD")
+if thr_env is not None:
+    try:
+        DECISION_THRESHOLD = float(thr_env)
+        print(f"Overriding decision threshold from env FAKE_DECISION_THRESHOLD={DECISION_THRESHOLD:.3f}")
+    except ValueError:
+        print(f"Invalid FAKE_DECISION_THRESHOLD value '{thr_env}', keeping threshold={DECISION_THRESHOLD:.3f}")
+
+# Load precomputed CSV features for exact training-time feature reuse
+spec_csv_path = "data/acoustic_analysis/spectrogram_features.csv"
+vad_csv_path = "data/vad_snr_analysis/vad_snr_results.csv"
+ling_csv_path = "data/linguistic_analysis/linguistic_features.csv"
+
+if os.path.exists(spec_csv_path) and os.path.exists(vad_csv_path) and os.path.exists(ling_csv_path):
+    try:
+        spec_df = pd.read_csv(spec_csv_path)
+        vad_df = pd.read_csv(vad_csv_path)
+        ling_df = pd.read_csv(ling_csv_path)
+
+        # Determine join key: prefer 'relative_path', fall back to 'audio_path'
+        join_key = None
+        for key in ["relative_path", "audio_path"]:
+            if key in spec_df.columns and key in vad_df.columns and key in ling_df.columns:
+                join_key = key
+                break
+
+        if join_key is not None:
+            # Ensure filename column exists in all
+            if "filename" not in spec_df.columns:
+                spec_df["filename"] = spec_df[join_key].apply(lambda p: os.path.basename(str(p)))
+            if "filename" not in vad_df.columns:
+                vad_df["filename"] = vad_df[join_key].apply(lambda p: os.path.basename(str(p)))
+            if "filename" not in ling_df.columns:
+                ling_df["filename"] = ling_df[join_key].apply(lambda p: os.path.basename(str(p)))
+
+            # Ensure VAD numeric cols are clean
+            for col in ["snr_db", "speech_ratio", "speech_duration_sec", "duration_sec"]:
+                if col in vad_df.columns:
+                    vad_df[col] = pd.to_numeric(vad_df[col], errors="coerce").fillna(0)
+
+            # Merge spectrogram + VAD
+            merged = spec_df.merge(
+                vad_df[[join_key, "filename"] + [c for c in VAD_FEATURE_COLS if c in vad_df.columns]],
+                on=join_key,
+                how="inner",
+                suffixes=("", "_vad"),
+            )
+            # Merge linguistic
+            merged = merged.merge(
+                ling_df[[join_key, "filename"] + LING_FEATURE_COLS],
+                on=join_key,
+                how="inner",
+                suffixes=("", "_ling"),
+            )
+
+            if len(merged) > 0:
+                csv_features_df = merged
+                csv_by_filename = merged.set_index("filename")
+                csv_by_relpath = merged.set_index(join_key)
+                print(
+                    f"Loaded {len(merged)} precomputed feature rows from CSVs "
+                    f"using join key '{join_key}'."
+                )
+        else:
+            print(
+            "Warning: neither 'relative_path' nor 'audio_path' present in all CSVs; "
+                "cannot build CSV feature lookup."
+            )
+    except Exception as e:
+        print(f"Warning: failed to initialize CSV feature lookup: {e}")
+else:
+    print("CSV feature files not found; API will rely on on-the-fly feature extraction.")
+
+model.eval()
+
+def extract_features_from_audio(audio_path):
+    """
+    Extract features using the same pipeline as was used to build the
+    spectrogram and VAD/SNR CSVs for training.
+    This ensures the API feature vector matches the training feature schema.
+    """
+    # Use the shared FeatureExtractor to compute all low-level acoustic + VAD features
+    feat_dict = feature_extractor.extract_all(audio_path)
+    if not feat_dict:
+        return None
+
+    # Start with spectrogram + VAD/SNR features
+    spec_vad_cols = SPEC_FEATURE_COLS + VAD_FEATURE_COLS
+    spec_vad = np.array([[float(feat_dict.get(col, 0.0)) for col in spec_vad_cols]], dtype=np.float32)
+
+    # We don't have transcript text at prediction time, so pad linguistic features with zeros.
+    ling_pad = np.zeros((1, len(LING_FEATURE_COLS)), dtype=np.float32)
+
+    raw_features = np.hstack([spec_vad, ling_pad])
+
+    # Apply the same StandardScaler used during training, if available
+    if scaler is not None:
+        features = scaler.transform(raw_features)
+    else:
+        features = raw_features
+    
+    return features
+
+
+def get_features_from_csv(filename: str | None = None, relpath: str | None = None):
+    """
+    Try to retrieve precomputed features from the CSVs using filename or relative path.
+    Returns a (1, 18) float32 array or None if not found.
+    """
+    if csv_features_df is None:
+        return None
+
+    row = None
+    if filename and csv_by_filename is not None:
+        key = os.path.basename(filename)
+        if key in csv_by_filename.index:
+            row = csv_by_filename.loc[key]
+    if row is None and relpath and csv_by_relpath is not None:
+        if relpath in csv_by_relpath.index:
+            row = csv_by_relpath.loc[relpath]
+
+    if row is None:
+        return None
+
+    ordered_cols = SPEC_FEATURE_COLS + VAD_FEATURE_COLS + LING_FEATURE_COLS
+    raw_features = np.array([[float(row[col]) for col in ordered_cols]], dtype=np.float32)
+    if scaler is not None:
+        return scaler.transform(raw_features)
+    return raw_features
 
 @app.route('/')
 def index():
-    print_request_info('/', 'GET')
     return render_template('index.html')
 
-@app.route('/api/train', methods=['POST'])
-@app.route('/api/train', methods=['POST'])
-def train():
-    start_time = time.time()
-    data = request.json
-    model_type = data.get('model_type', 'cnn')
-    epochs = data.get('epochs', 100)  # Получаем количество эпох из запроса
-    
-    print_request_info('/api/train', 'POST', "TRAINING")
-    print_model_info(model_type, 'train')
-    print(f"  Epochs: {epochs} (fixed)")
-    
-    try:
-        from scripts.model_training import ModelTrainer
-        trainer = ModelTrainer()
-        result = trainer.train_model(model_type, fixed_epochs=epochs)
-        
-        elapsed = time.time() - start_time
-        print(f"{Colors.GREEN}✓ Training completed in {elapsed:.2f}s{Colors.END}")
-        print(f"  Accuracy: {result['accuracy']:.4f} | F1: {result['f1_score']:.4f} | Epochs: {result['epochs']}")
-        
-        return jsonify({
-            'status': 'success',
-            'model_type': model_type,
-            'results': result,
-            'elapsed_time': f"{elapsed:.2f}s"
-        })
-    except Exception as e:
-        print(f"{Colors.RED}✗ Training failed: {str(e)}{Colors.END}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/device', methods=['GET'])
-def get_device_info():
-    return jsonify({
-        'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-        'gpu': torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
-    })
-
-@app.route('/api/benchmark', methods=['GET'])
-def benchmark():
-    start_time = time.time()
-    print_request_info('/api/benchmark', 'GET', "BENCHMARK")
-    print_model_info('all', 'benchmark')
-    
-    try:
-        results = benchmark_models()
-        elapsed = time.time() - start_time
-        
-        if results is not None and not results.empty:
-            print(f"{Colors.GREEN}✓ Benchmark completed in {elapsed:.2f}s{Colors.END}")
-            for _, row in results.iterrows():
-                print(f"  {row['model_type']}: Acc={row['accuracy']:.4f}, F1={row['f1_score']:.4f}, Time={row.get('inference_time_sec', 0):.3f}s")
-        
-        return jsonify({
-            'status': 'success',
-            'results': results.to_dict('records') if results is not None else [],
-            'elapsed_time': f"{elapsed:.2f}s"
-        })
-    except Exception as e:
-        print(f"{Colors.RED}✗ Benchmark failed: {str(e)}{Colors.END}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/predict', methods=['POST'])
+@app.route('/predict', methods=['POST'])
 def predict():
-    start_time = time.time()
-    print_request_info('/api/predict', 'POST', "PREDICT")
-    
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
-    
-    file = request.files['file']
-    model_type = request.form.get('model_type', 'cnn')
-    
-    print_model_info(model_type, 'predict')
-    print(f"  File: {file.filename}")
-    
     try:
-        if model_type not in models:
-            print(f"  Loading {model_type} model...")
-            if model_type == 'cnn':
-                model = ModelFactory.get_model('cnn', input_dim=14, num_classes=2)
-            else:
-                model = ModelFactory.get_model('hybrid', cnn_input_dim=14, feature_dim=5, num_classes=2)
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({'success': False, 'error': 'No file selected'}), 400
             
-            model.load_state_dict(torch.load(f'saved_models/{model_type}_final.pth', map_location=device))
-            model.eval()
-            models[model_type] = Predictor(model, device)
-            print(f"  {Colors.GREEN}✓ Model loaded{Colors.END}")
+            filename = secure_filename(file.filename)
+
+            # First, try to use precomputed CSV features by filename
+            features = get_features_from_csv(filename=filename)
+
+            if features is None:
+                # Fall back to on-the-fly feature extraction
+                temp_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(temp_path)
+                
+                features = extract_features_from_audio(temp_path)
+                
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+            
+            if features is None:
+                return jsonify({'success': False, 'error': 'Could not extract features from audio'}), 400
+        else:
+            data = request.get_json()
+            if not data:
+                return jsonify({'success': False, 'error': 'No JSON body provided'}), 400
+
+            # Priority: if client provides filename/relative_path, try CSV lookup
+            filename = data.get('filename')
+            relpath = data.get('relative_path') or data.get('audio_path')
+            features = get_features_from_csv(filename=filename, relpath=relpath)
+
+            if features is None:
+                if 'features' not in data:
+                    return jsonify({'success': False, 'error': 'No features provided'}), 400
+                raw = np.array(data['features']).reshape(1, -1).astype(np.float32)
+
+                # Accept 18-d (spec+VAD) or full 25-d (spec+VAD+ling) and pad if needed.
+                if raw.shape[1] == len(SPEC_FEATURE_COLS) + len(VAD_FEATURE_COLS):
+                    ling_pad = np.zeros((1, len(LING_FEATURE_COLS)), dtype=np.float32)
+                    raw_features = np.hstack([raw, ling_pad])
+                elif raw.shape[1] == len(SPEC_FEATURE_COLS) + len(VAD_FEATURE_COLS) + len(LING_FEATURE_COLS):
+                    raw_features = raw
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Unexpected feature length {raw.shape[1]}; expected 18 or 25.'
+                    }), 400
+
+                if scaler is not None:
+                    features = scaler.transform(raw_features)
+                else:
+                    features = raw_features
         
-        features = extract_features_from_file(file)
-        prediction = models[model_type].predict(features)
-        class_name = 'real' if np.argmax(prediction) == 1 else 'fake'
-        confidence = float(np.max(prediction))
-        
-        elapsed = time.time() - start_time
-        print(f"  {Colors.GREEN}✓ Prediction: {class_name} (conf: {confidence:.3f}) in {elapsed:.2f}s{Colors.END}")
+        with torch.no_grad():
+            inputs = torch.FloatTensor(features).to(device)
+            logits = model(inputs)
+            probs_fake = torch.sigmoid(logits)[0][0]
+            probs_real = 1.0 - probs_fake
+            
+            print(f"Probabilities - Real: {probs_real:.4f}, Fake: {probs_fake:.4f}")
+            
+            # Binary decision based on fake probability and learned threshold
+            pred = 1 if probs_fake >= DECISION_THRESHOLD else 0
         
         return jsonify({
-            'status': 'success',
-            'prediction': class_name,
-            'confidence': confidence,
-            'model_type': model_type,  # <-- Добавлено это поле
+            'success': True,
+            'prediction': 'fake' if pred == 1 else 'real',
+            'confidence': float(probs_fake.cpu().numpy() if pred == 1 else probs_real.cpu().numpy()),
             'probabilities': {
-                'fake': float(prediction[0]),
-                'real': float(prediction[1])
-            },
-            'elapsed_time': f"{elapsed:.2f}s"
+                'real': float(probs_real.cpu().numpy()),
+                'fake': float(probs_fake.cpu().numpy())
+            }
         })
     except Exception as e:
-        print(f"{Colors.RED}✗ Prediction failed: {str(e)}{Colors.END}")
-        return jsonify({'error': str(e)}), 500
-
-def extract_features_from_file(file):
-    temp_path = 'temp_audio.wav'
-    file.save(temp_path)
-    
-    spec_df = pd.read_csv('data/acoustic_analysis/spectrogram_features.csv')
-    vad_df = pd.read_csv('data/vad_snr_analysis/annotations_with_vad_snr.csv')
-    
-    spec_features = spec_df.iloc[0, :14].values.astype(np.float32)
-    
-    vad_cols = ['duration_sec','speech_segments','speech_duration_sec','speech_ratio','snr_db']
-    vad_features = vad_df[vad_cols].iloc[0].fillna(0).values.astype(np.float32)
-    
-    try:
-        os.remove(temp_path)
-    except:
-        pass
-    
-    return {
-        'cnn_input': spec_features,
-        'lstm_input': np.random.randn(5, 5).astype(np.float32),
-        'hand_features': vad_features
-    }
-
-@app.route('/api/visualize', methods=['GET'])
-def visualize():
-    start_time = time.time()
-    print_request_info('/api/visualize', 'GET', "VISUALIZE")
-    
-    try:
-        compare_models()
-        
-        plot_path = 'results/comparison_plots.png'
-        if os.path.exists(plot_path):
-            with open(plot_path, 'rb') as f:
-                plot_data = base64.b64encode(f.read()).decode('utf-8')
-            
-            elapsed = time.time() - start_time
-            print(f"{Colors.GREEN}✓ Visualization generated in {elapsed:.2f}s{Colors.END}")
-            
-            return jsonify({
-                'status': 'success',
-                'plot': plot_data,
-                'elapsed_time': f"{elapsed:.2f}s"
-            })
-        else:
-            print(f"{Colors.YELLOW}⚠ No plots found{Colors.END}")
-            return jsonify({'error': 'No plots found'}), 404
-    except Exception as e:
-        print(f"{Colors.RED}✗ Visualization failed: {str(e)}{Colors.END}")
-        return jsonify({'error': str(e)}), 500
-
-@app.before_request
-def before_request():
-    if request.path.startswith('/api'):
-        print(f"{Colors.BOLD}➤ {Colors.END}", end='')
-
-@app.after_request
-def after_request(response):
-    return response
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
-    print_logo()
-    print(f"{Colors.BOLD}Device:{Colors.END} {device}")
-    if device.type == 'cuda':
-        print(f"{Colors.BOLD}GPU:{Colors.END} {torch.cuda.get_device_name(0)}")
-    print(f"{Colors.BOLD}Server:{Colors.END} http://localhost:5000")
-    print(f"{Colors.BOLD}Started:{Colors.END} {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("\n" + "="*60 + "\n")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)

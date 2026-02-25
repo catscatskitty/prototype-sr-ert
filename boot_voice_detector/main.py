@@ -1,40 +1,47 @@
+# run.py (master запуск)
 import subprocess
 import sys
 import os
-import torch
 
-def main():
-    print("="*60)
-    print("AUDIO DEEPFAKE DETECTION PIPELINE")
-    print("="*60)
-    
-    if torch.cuda.is_available():
-        print(f"GPU: {torch.cuda.get_device_name(0)}")
-        print(f"CUDA Version: {torch.version.cuda}")
-    else:
-        print("CUDA not available, using CPU")
-    
-    steps = [
-        ("Data Preprocessing", "scripts/data_preprocessing.py"),
-        ("Model Training", "scripts/model_training.py"),
-        ("Benchmarking (inference only)", "scripts/benchmark_models.py"),
-        ("Comparison", "scripts/compare_models.py")
-    ]
-    
-    for step_name, script in steps:
-        print(f"\n{'='*60}")
-        print(f"STEP: {step_name}")
-        print('='*60)
-        
-        result = subprocess.run([sys.executable, script])
-        if result.returncode != 0:
-            print(f"✗ {step_name} failed!")
-            sys.exit(1)
-        print(f"✓ {step_name} completed successfully")
-    
-    print("\n" + "="*60)
-    print("PIPELINE COMPLETED SUCCESSFULLY")
-    print("="*60)
+os.makedirs('saved_models', exist_ok=True)
+os.makedirs('results', exist_ok=True)
 
-if __name__ == '__main__':
-    main()
+print("Starting data preprocessing...")
+print("="*50)
+result = subprocess.run([sys.executable, 'scripts/data_preprocessing.py'], capture_output=True, text=True)
+if result.returncode != 0:
+    print(f"Errors during data preprocessing:\n{result.stderr}")
+else:
+print(result.stdout)
+
+print("\nData preprocessing complete!")
+
+print("\nStarting model training...")
+print("="*50)
+result = subprocess.run([sys.executable, 'scripts/model_training.py'], capture_output=True, text=True)
+if result.returncode != 0:
+    print(f"Errors during model training:\n{result.stderr}")
+else:
+    print(result.stdout)
+
+print("\nModel training complete!")
+
+print("\nStarting benchmarking models...")
+print("="*50)
+result = subprocess.run([sys.executable, 'scripts/benchmark_models.py'], capture_output=True, text=True)
+if result.returncode != 0:
+    print(f"Errors during benchmarking:\n{result.stderr}")
+else:
+    print(result.stdout)
+
+print("\nBenchmarking complete!")
+
+print("\nStarting comparison of models...")
+print("="*50)
+result = subprocess.run([sys.executable, 'scripts/compare_models.py'], capture_output=True, text=True)
+if result.returncode != 0:
+    print(f"Errors during comparison:\n{result.stderr}")
+else:
+    print(result.stdout)
+
+print("\nComparison complete!")

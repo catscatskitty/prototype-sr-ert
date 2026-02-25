@@ -1,6 +1,8 @@
+# docker.compose.yml
 version: '3.8'
+
 services:
-  web:
+  app:
     build: .
     ports:
       - "5000:5000"
@@ -8,6 +10,8 @@ services:
       - ./data:/app/data
       - ./saved_models:/app/saved_models
       - ./results:/app/results
+    environment:
+      - PORT=5000
     deploy:
       resources:
         reservations:
@@ -15,5 +19,3 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    environment:
-      - CUDA_VISIBLE_DEVICES=0

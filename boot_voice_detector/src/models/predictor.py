@@ -1,20 +1,30 @@
 import torch
 import numpy as np
 
-class Predictor:
-    def __init__(self, model, device):
-        self.model = model
+class ModelPredictor:
+    def __init__(self, model, device, scaler_spec=None, scaler_vad=None):
+        self.model = model.to(device)
         self.device = device
-
-    def predict(self, features):
+        self.scaler_spec = scaler_spec
+        self.scaler_vad = scaler_vad
         self.model.eval()
+        
+    def predict(self, features):
+        if isinstance(features, np.ndarray):
+            features = torch.FloatTensor(features)
+        
+        if len(features.shape) == 1:
+            features = features.unsqueeze(0)
+        
+        features = features.to(self.device)
+        
         with torch.no_grad():
-            if 'hybrid' in str(type(self.model)).lower():
-                cnn_input = torch.FloatTensor(features['cnn_input']).unsqueeze(0).to(self.device)
-                lstm_input = torch.FloatTensor(features['lstm_input']).unsqueeze(0).to(self.device)
-                hand_features = torch.FloatTensor(features['hand_features']).unsqueeze(0).to(self.device)
-                outputs = self.model(cnn_input, lstm_input, hand_features)
-            else:
-                inputs = torch.FloatTensor(features['cnn_input']).unsqueeze(0).to(self.device)
-                outputs = self.model(inputs)
-            return torch.softmax(outputs, dim=1).cpu().numpy()[0]
+            outputs = self.model(features)
+            probabilities = torch.softmax(outputs, dim=1)
+            predictions = torch.argmax(outputs, dim=1)
+        
+        return predictions.cpu().numpy(), probabilities.cpu().numpy()
+    
+    def predict_proba(self, features):
+        preds, probs = self.predict(features)
+        return probs

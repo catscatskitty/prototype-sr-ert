@@ -9,6 +9,7 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+data/audio/
 pip-log.txt
 pip-delete-this-directory.txt
 .tox/
@@ -25,4 +26,5 @@ coverage.xml
 *.pyd
 *.db
 *.sqlite
-.DS_Store
+.DS_Storedata/audio/
+data/audio_aug/
