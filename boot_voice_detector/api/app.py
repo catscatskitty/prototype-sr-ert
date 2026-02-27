@@ -68,7 +68,7 @@ csv_by_filename = None
 csv_by_relpath = None
 
 if os.path.exists(model_path):
-    checkpoint = torch.load(model_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
         print(f"Loaded model checkpoint from epoch: {checkpoint.get('epoch', 'unknown')} "
