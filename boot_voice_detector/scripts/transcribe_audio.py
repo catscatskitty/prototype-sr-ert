@@ -1,233 +1,157 @@
 """
-scripts/transcribe_audio.py
-
-Transcribe all audio files listed in data/raw_annotations.csv and write
-the transcripts into the "text" column (overwriting any existing text).
-
-Optimized for macOS / Apple Silicon:
-- Uses PyTorch MPS backend when available (device="mps").
-- Falls back to CUDA or CPU otherwise.
-
-Dependencies (install once in your venv):
-
-    pip install openai-whisper
-
-Usage:
-
-    cd boot_voice_detector
-    python scripts/transcribe_audio.py
-
-Options (see --help):
-- --model: whisper model size (tiny, base, small, medium, large)
-- --language: language hint (e.g. "ru", "en"), or leave None to auto-detect
+WHISPER - АВТОСОХРАНЕНИЕ ПРЯМО В ФАЙЛ
 """
 
 import os
-import sys
-import argparse
-
+import torch
+import whisper
 import pandas as pd
+import time
+from datetime import datetime
+import warnings
+warnings.filterwarnings("ignore")
 
+# Оптимизации
+torch.backends.cudnn.benchmark = True
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
-def normalize_path(p: str) -> str:
-    return p.replace("\\", os.sep).replace("/", os.sep)
+# Проверка GPU
+if torch.cuda.is_available():
+    device = "cuda"
+    print(f"🚀 GPU: {torch.cuda.get_device_name(0)}")
+else:
+    device = "cpu"
+    print(f"⚠️  CPU MODE - БУДЕТ МЕДЛЕННО!")
 
+# Загружаем модель один раз
+print(f"\n📦 Загрузка модели medium...")
+start_load = time.time()
+model = whisper.load_model("medium", device=device)
+print(f"   Загружено за {time.time()-start_load:.1f}с")
 
-def detect_device() -> str:
+def transcribe_file(audio_path, language):
+    """Быстрая транскрибация"""
     try:
-        import torch
-
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            return "mps"
-        if torch.cuda.is_available():
-            return "cuda"
-        return "cpu"
-    except Exception:
-        return "cpu"
-
+        result = model.transcribe(
+            audio_path,
+            language=language,
+            fp16=True if device == "cuda" else False,
+            verbose=False,
+            temperature=0.0,
+            without_timestamps=True,
+            beam_size=1,
+            best_of=1,
+        )
+        return result["text"].strip(), None
+    except Exception as e:
+        return "", str(e)
 
 def main():
-    parser = argparse.ArgumentParser(description="Transcribe audio into raw_annotations.csv[text].")
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="small",
-        help="Whisper model size (tiny, base, small, medium, large). Default: small.",
-    )
-    parser.add_argument(
-        "--language",
-        type=str,
-        default=None,
-        help='Optional language hint (e.g. "ru", "en"). If omitted, whisper auto-detects.',
-    )
-    parser.add_argument(
-        "--max-samples",
-        type=int,
-        default=None,
-        help="Optional limit on number of rows to transcribe (for testing).",
-    )
-    parser.add_argument(
-        "--force-mps",
-        action="store_true",
-        help="Force using the MPS backend (Apple Silicon) and do NOT fall back to CPU on backend errors.",
-    )
-    parser.add_argument(
-        "--backend",
-        type=str,
-        choices=["auto", "mlx"],
-        default="auto",
-        help="Backend to use: 'auto' (PyTorch Whisper) or 'mlx' (mlx-whisper on Apple Silicon).",
-    )
-
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--language', default='ru')
+    parser.add_argument('--max', type=int, default=None)
+    parser.add_argument('--save-interval', type=int, default=10)
     args = parser.parse_args()
 
+    print(f"\n{'='*60}")
+    print(f"🔍 ПОИСК ФАЙЛОВ С ОШИБКОЙ")
+    print(f"{'='*60}")
+
+    # Пути
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    annotations_path = os.path.join(project_root, "data", "raw_annotations.csv")
-
-    if not os.path.exists(annotations_path):
-        raise FileNotFoundError(f"raw_annotations.csv not found at {annotations_path}")
-
-    print(f"[transcribe] Loading annotations from {annotations_path}")
-    df = pd.read_csv(annotations_path)
-    print(f"[transcribe] Rows: {len(df)}")
-
-    # Ensure "text" column exists
+    csv_path = os.path.join(project_root, "data", "raw_annotations.csv")
+    audio_root = os.path.join(project_root, "data")
+    
+    # Загрузка CSV
+    print(f"\n📂 Загрузка {csv_path}")
+    df = pd.read_csv(csv_path)
+    
     if "text" not in df.columns:
         df["text"] = ""
-
-    audio_root = os.path.join(project_root, "data")
-    total = len(df)
+    
+    # Сбор файлов с ошибкой
+    files_to_process = []
+    error_text = "[ERROR] Речь не распознана"
+    
+    for idx, row in df.iterrows():
+        if args.max and len(files_to_process) >= args.max:
+            break
+        
+        if str(row.get("text", "")) != error_text:
+            continue
+        
+        rel_path = row.get("audio_path") or row.get("relative_path")
+        if not isinstance(rel_path, str):
+            continue
+        
+        audio_path = os.path.join(audio_root, rel_path.replace("\\", os.sep).replace("/", os.sep))
+        
+        if os.path.exists(audio_path):
+            files_to_process.append((idx, audio_path))
+    
+    total = len(files_to_process)
+    if total == 0:
+        print(f"\n✅ Нет файлов с ошибкой")
+        return
+    
+    print(f"\n📊 Найдено файлов: {total}")
+    print(f"{'='*60}\n")
+    
+    # Прогрев
+    if total > 0:
+        print("🔥 Прогрев модели...")
+        transcribe_file(files_to_process[0][1], args.language)
+        print("   Готово\n")
+    
+    # Основной цикл
+    start_time = time.time()
     processed = 0
-
-    # Backend: MLX (mlx-whisper)
-    if args.backend == "mlx":
-        try:
-            import mlx_whisper  # type: ignore
-        except ImportError as e:
-            raise SystemExit(
-                "The 'mlx-whisper' package is not installed. Install it with:\n"
-                "  pip install mlx-whisper\n"
-            ) from e
-
-        print("[transcribe] Using MLX backend (mlx-whisper)")
-
-        for idx, row in df.iterrows():
-            if args.max_samples is not None and processed >= args.max_samples:
-                break
-
-            rel = row.get("audio_path") or row.get("relative_path")
-            if not isinstance(rel, str) or not rel:
-                continue
-
-            rel_norm = normalize_path(rel)
-            audio_path = rel_norm
-            if not os.path.isabs(audio_path):
-                audio_path = os.path.join(audio_root, audio_path)
-            audio_path = os.path.normpath(audio_path)
-
-            if not os.path.exists(audio_path):
-                print(f"[transcribe][warn] Missing audio: {audio_path}")
-                continue
-
-            try:
-                print(f"[transcribe] ({processed+1}/{total}) {audio_path}")
-                result = mlx_whisper.transcribe(audio_path)
-                text = (result.get("text") or "").strip()
-            except Exception as e:
-                print(f"[transcribe][warn] Failed to transcribe {audio_path} with MLX: {e}")
-                text = ""
-
+    errors = 0
+    
+    for i, (idx, audio_path) in enumerate(files_to_process):
+        # Прогресс
+        elapsed = time.time() - start_time
+        if processed > 0:
+            speed = processed / elapsed
+            eta = (total - processed) / speed
+        else:
+            speed = 0
+            eta = 0
+        
+        print(f"\r📊 [{processed}/{total}] {speed:.1f} ф/с | ETA: {eta:.1f}с", end="")
+        
+        # Транскрибация
+        text, error = transcribe_file(audio_path, args.language)
+        
+        if error:
+            errors += 1
+            print(f"\n❌ Ошибка: {error[:100]}")
+        else:
             df.at[idx, "text"] = text
             processed += 1
-
-    # Backend: auto (PyTorch Whisper with MPS/CPU)
-    else:
-        # Import whisper lazily so we can show a clear error if it's missing
-        try:
-            import whisper  # type: ignore
-        except ImportError as e:
-            raise SystemExit(
-                "The 'whisper' package is not installed. Install it with:\n"
-                "  pip install openai-whisper\n"
-            ) from e
-
-        # Choose device
-        if args.force_mps:
-            device = "mps"
-            print("[transcribe] --force-mps enabled: forcing device='mps' (no CPU fallback).")
-        else:
-            device = detect_device()
-        print(f"[transcribe] Preferred device: {device}")
-
-        # Try to load on the preferred device.
-        # If --force-mps is set, we let any backend errors propagate.
-        load_device = device
-        print(f"[transcribe] Loading whisper model: {args.model} on {load_device}")
-        if args.force_mps:
-            model = whisper.load_model(args.model, device=load_device)
-        else:
-            try:
-                model = whisper.load_model(args.model, device=load_device)
-            except NotImplementedError as e:
-                print(f"[transcribe][warn] Failed to load model on {load_device}: {e}")
-                load_device = "cpu"
-                print(f"[transcribe] Falling back to CPU for Whisper model.")
-                model = whisper.load_model(args.model, device=load_device)
-            except RuntimeError as e:
-                # Catch SparseMPS and similar backend issues
-                if "SparseMPS" in str(e) or "aten::empty.memory_format" in str(e):
-                    print(f"[transcribe][warn] Backend issue on {load_device}: {e}")
-                    load_device = "cpu"
-                    print(f"[transcribe] Falling back to CPU for Whisper model.")
-                    model = whisper.load_model(args.model, device=load_device)
-                else:
-                    raise
-
-        for idx, row in df.iterrows():
-            if args.max_samples is not None and processed >= args.max_samples:
-                break
-
-            rel = row.get("audio_path") or row.get("relative_path")
-            if not isinstance(rel, str) or not rel:
-                continue
-
-            rel_norm = normalize_path(rel)
-            audio_path = rel_norm
-            if not os.path.isabs(audio_path):
-                audio_path = os.path.join(audio_root, audio_path)
-            audio_path = os.path.normpath(audio_path)
-
-            if not os.path.exists(audio_path):
-                print(f"[transcribe][warn] Missing audio: {audio_path}")
-                continue
-
-            try:
-                print(f"[transcribe] ({processed+1}/{total}) {audio_path}")
-                result = model.transcribe(
-                    audio_path,
-                    language=args.language,
-                    fp16=(load_device != "cpu"),
-                )
-                text = (result.get("text") or "").strip()
-            except Exception as e:
-                print(f"[transcribe][warn] Failed to transcribe {audio_path}: {e}")
-                text = ""
-
-            # Overwrite previous text
-            df.at[idx, "text"] = text
-            processed += 1
-
-    print(f"[transcribe] Transcribed {processed} rows.")
-
-    # Backup and save
-    backup_path = annotations_path + ".pre_transcribe.bak"
-    print(f"[transcribe] Backing up original annotations to {backup_path}")
-    os.replace(annotations_path, backup_path)
-
-    df.to_csv(annotations_path, index=False)
-    print(f"[transcribe] Wrote updated annotations with transcripts to {annotations_path}")
-
+        
+        # АВТОСОХРАНЕНИЕ ПРЯМО В ФАЙЛ
+        if (i + 1) % args.save_interval == 0:
+            df.to_csv(csv_path, index=False)
+            print(f"\n💾 Автосохранено в {os.path.basename(csv_path)}")
+    
+    # Финальное сохранение
+    print(f"\n\n💾 Финальное сохранение...")
+    df.to_csv(csv_path, index=False)
+    
+    # Итог
+    total_time = time.time() - start_time
+    avg_speed = processed / total_time if total_time > 0 else 0
+    
+    print(f"\n{'='*60}")
+    print(f"✅ ГОТОВО!")
+    print(f"📊 Обработано: {processed}/{total}")
+    print(f"❌ Ошибок: {errors}")
+    print(f"⏱️  Время: {total_time:.1f}с")
+    print(f"⚡ Скорость: {avg_speed:.1f} файлов/сек")
+    print(f"{'='*60}")
 
 if __name__ == "__main__":
     main()
-

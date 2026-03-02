@@ -1,4 +1,5 @@
 # Virtual Environment
+.venv/
 venv/
 env/
 ENV/
@@ -9,7 +10,7 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
-#data/audio/
+data/audio/
 pip-log.txt
 pip-delete-this-directory.txt
 .tox/
@@ -27,4 +28,4 @@ coverage.xml
 *.db
 *.sqlite
 .DS_Storedata/audio/
-# data/audio_aug/
+data/audio_aug/
