@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Recognition</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style_home.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <style>
+        /* Дополнительные стили */
+        .error-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff4444;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: none;
+            animation: slideIn 0.3s ease;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .warning-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ffbb33;
+            color: #333;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: none;
+            animation: slideIn 0.3s ease;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .file-load-error {
+            border: 2px solid #ff4444 !important;
+            animation: shake 0.5s ease;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        .process-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        
+        /* Кнопка воспроизведения */
+        .play-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 25px;
+            font-size: 24px;
+            cursor: pointer;
+            margin: 10px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+        
+        .play-button:hover {
+            transform: scale(1.1);
+            background: #764ba2;
+        }
+        
+        .play-button.playing {
+            background: #ff4444;
+        }
+        
+        .audio-controls {
+            display: flex;
+            justify-content: center;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Тосты для уведомлений -->
+        <div class="error-toast" id="errorToast"></div>
+        <div class="warning-toast" id="warningToast"></div>
+
+        <!-- Шапка -->
+        <div class="header">
+            <h1 class="title">Speech Recognition</h1>
+            <p class="subtitle">сириус.лето</p>
+        </div>
+
+        <!-- ===== ФРЕЙМ 1: ЗАГРУЗКА ФАЙЛА ===== -->
+        <div class="frame frame-upload" id="frameUpload">
+            <div class="file-upload-wrapper">
+                <input type="file" id="audioFileInput" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.wma,.webm,audio/*" hidden>
+                <button class="folder-button" id="selectFileBtn">
+                    <span class="button-text">Выбрать аудиофайл</span>
+                </button>
+                <span id="fileNameDisplay" class="file-name-display"></span>
+            </div>
+            <button class="analyze-button" id="analyzeBtn" style="display: none;">
+                <span class="button-text">🔍 Анализировать</span>
+            </button>
+        </div>
+
+        <!-- ===== ФРЕЙМ 2: ПРОЦЕСС АНАЛИЗА ===== -->
+        <div class="frame frame-processing" id="frameProcessing" style="display: none;">
+            <h2 class="frame-title">Использование</h2>
+            
+            <!-- Визуализация (спектрограмма) с прогрессом -->
+            <div class="visualization" id="visualization">
+                <div class="spectrogram-container" id="spectrogramContainer">
+                    <img src="/static/icons/Waveform.png" alt="Спектрограмма" class="spectrogram-icon" id="spectrogramIcon">
+                    <div class="spectrogram-progress-bar" id="spectrogramProgressBar"></div>
+                </div>
+                
+                <!-- Время под спектрограммой -->
+                <div class="spectrogram-time">
+                    <span id="currentTimeDisplay">0:00</span>
+                    <span>/</span>
+                    <span id="totalTimeDisplay">0:00</span>
+                </div>
+            </div>
+
+            <!-- Кнопка воспроизведения -->
+            <div class="audio-controls">
+                <button class="play-button" id="playPauseBtn">▶️</button>
+            </div>
+
+            <!-- Аудиоплеер -->
+            <audio id="audioPlayer" preload="metadata"></audio>
+
+            <!-- Кнопка обработки -->
+            <button class="process-button" id="processBtn">
+                <span class="button-text">⚙️ Обработать</span>
+            </button>
+
+            <!-- Прогресс обработки -->
+            <div class="processing-status" id="processingStatus" style="display: none;">
+                <div class="status-item">
+                    <span class="status-dot processing-dot"></span>
+                    <span class="status-text">Подготовка к обработке...</span>
+                </div>
+                <div class="progress-bar processing-bar">
+                    <div class="progress-fill" id="processingProgress" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== ФРЕЙМ 3: РЕЗУЛЬТАТ ===== -->
+        <div class="frame frame-result" id="frameResult" style="display: none;">
+            <div class="result-fake" id="resultFake" style="display: none;">
+                <h2 class="result-title">Готово (Fake)</h2>
+                <div class="result-icon">
+                    <span style="font-size: 80px;">❌</span>
+                </div>
+                <p class="result-text">СГЕНЕРИРОВАННАЯ ОЗВУЧКА</p>
+                <button class="details-button">Подробности</button>
+            </div>
+            <div class="result-real" id="resultReal" style="display: none;">
+                <h2 class="result-title">Готово (Real)</h2>
+                <div class="result-icon">
+                    <span style="font-size: 80px;">✅</span>
+                </div>
+                <p class="result-text">РЕАЛЬНЫЙ ГОЛОС</p>
+                <button class="details-button">Подробности</button>
+            </div>
+        </div>
+
+        <!-- Нижняя навигация -->
+        <div class="bottom-nav">
+            <button class="nav-item active" id="homeNavBtn">
+                <span class="nav-icon">
+                    <img src="/static/icons/Home.png" alt="Главная" width="38" height="38">
+                </span>
+                <span class="nav-label">Главная</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Глобальные переменные
+        let selectedFile = null;
+        let audioUrl = null;
+        let analysisResult = null;
+        let isPlaying = false;
+        
+        // Элементы DOM
+        const audioFileInput = document.getElementById('audioFileInput');
+        const selectFileBtn = document.getElementById('selectFileBtn');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const frameUpload = document.getElementById('frameUpload');
+        const frameProcessing = document.getElementById('frameProcessing');
+        const frameResult = document.getElementById('frameResult');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+        const totalTimeDisplay = document.getElementById('totalTimeDisplay');
+        const spectrogramProgressBar = document.getElementById('spectrogramProgressBar');
+        const processBtn = document.getElementById('processBtn');
+        const processingStatus = document.getElementById('processingStatus');
+        const processingProgress = document.getElementById('processingProgress');
+        const resultFake = document.getElementById('resultFake');
+        const resultReal = document.getElementById('resultReal');
+        const errorToast = document.getElementById('errorToast');
+        const warningToast = document.getElementById('warningToast');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        
+        // Функции для показа уведомлений
+        function showError(message) {
+            errorToast.textContent = message;
+            errorToast.style.display = 'block';
+            setTimeout(() => {
+                errorToast.style.display = 'none';
+            }, 5000);
+        }
+        
+        function showWarning(message) {
+            warningToast.textContent = message;
+            warningToast.style.display = 'block';
+            setTimeout(() => {
+                warningToast.style.display = 'none';
+            }, 4000);
+        }
+        
+        // Обработчик выбора файла
+        selectFileBtn.addEventListener('click', () => {
+            audioFileInput.click();
+        });
+        
+        audioFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Проверка размера файла (50MB максимум)
+            const maxSize = 50 * 1024 * 1024;
+            if (file.size > maxSize) {
+                showError('Файл слишком большой. Максимальный размер: 50MB');
+                selectFileBtn.classList.add('file-load-error');
+                setTimeout(() => {
+                    selectFileBtn.classList.remove('file-load-error');
+                }, 500);
+                audioFileInput.value = '';
+                return;
+            }
+            
+            // Проверка расширения
+            const allowedExtensions = ['.wav', '.mp3', '.m4a', '.ogg', '.flac', '.aac', '.webm'];
+            const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+            if (!allowedExtensions.includes(fileExt)) {
+                showWarning('Неподдерживаемый формат. Возможны проблемы с воспроизведением');
+            }
+            
+            selectedFile = file;
+            fileNameDisplay.textContent = file.name;
+            analyzeBtn.style.display = 'inline-flex';
+            
+            // Загружаем аудио для прослушивания
+            loadAudioForPlayback(file);
+        });
+        
+        // Функция загрузки аудио для прослушивания
+        function loadAudioForPlayback(file) {
+            // Очищаем предыдущий URL
+            if (audioUrl) {
+                URL.revokeObjectURL(audioUrl);
+            }
+            
+            // Создаем новый URL для файла
+            audioUrl = URL.createObjectURL(file);
+            audioPlayer.src = audioUrl;
+            
+            // Обработчики событий
+            audioPlayer.onloadedmetadata = () => {
+                const duration = audioPlayer.duration;
+                if (duration && isFinite(duration)) {
+                    const minutes = Math.floor(duration / 60);
+                    const seconds = Math.floor(duration % 60);
+                    totalTimeDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                    currentTimeDisplay.textContent = '0:00';
+                    spectrogramProgressBar.style.width = '0%';
+                }
+            };
+            
+            audioPlayer.onplay = () => {
+                isPlaying = true;
+                playPauseBtn.textContent = '⏸️';
+                playPauseBtn.classList.add('playing');
+            };
+            
+            audioPlayer.onpause = () => {
+                isPlaying = false;
+                playPauseBtn.textContent = '▶️';
+                playPauseBtn.classList.remove('playing');
+            };
+            
+            audioPlayer.onended = () => {
+                isPlaying = false;
+                playPauseBtn.textContent = '▶️';
+                playPauseBtn.classList.remove('playing');
+                currentTimeDisplay.textContent = '0:00';
+                spectrogramProgressBar.style.width = '0%';
+            };
+            
+            audioPlayer.onerror = (e) => {
+                console.log('Audio error (ignored):', e);
+                showWarning('Не удалось загрузить аудио для прослушивания');
+            };
+        }
+        
+        // Обработчик кнопки воспроизведения
+        playPauseBtn.addEventListener('click', () => {
+            if (!audioPlayer.src) {
+                showWarning('Сначала выберите аудиофайл');
+                return;
+            }
+            
+            if (isPlaying) {
+                audioPlayer.pause();
+            } else {
+                audioPlayer.play().catch(error => {
+                    console.log('Play error:', error);
+                    showWarning('Не удалось воспроизвести аудио');
+                });
+            }
+        });
+        
+        // Обновление времени при воспроизведении
+        audioPlayer.addEventListener('timeupdate', () => {
+            const current = audioPlayer.currentTime;
+            const minutes = Math.floor(current / 60);
+            const seconds = Math.floor(current % 60);
+            currentTimeDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            const duration = audioPlayer.duration;
+            if (duration && duration > 0) {
+                const progress = (current / duration) * 100;
+                spectrogramProgressBar.style.width = progress + '%';
+            }
+        });
+        
+        // Обработчик кнопки "Анализировать"
+        analyzeBtn.addEventListener('click', () => {
+            if (!selectedFile) {
+                showError('Выберите файл для анализа');
+                return;
+            }
+            
+            // Останавливаем воспроизведение если играет
+            if (isPlaying) {
+                audioPlayer.pause();
+            }
+            
+            // Переключаемся на фрейм обработки
+            frameUpload.style.display = 'none';
+            frameProcessing.style.display = 'block';
+            
+            // Сбрасываем прогресс
+            updateProgress(0);
+            processingStatus.style.display = 'none';
+            
+            // Отключаем кнопку обработки
+            processBtn.classList.add('disabled');
+            
+            // Отправляем файл на сервер
+            analyzeAudio(selectedFile);
+        });
+        
+        // Функция анализа аудио
+        async function analyzeAudio(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                processingStatus.style.display = 'block';
+                updateProgress(30);
+                
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                updateProgress(70);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Ошибка сервера');
+                }
+                
+                const data = await response.json();
+                updateProgress(90);
+                
+                if (data.success) {
+                    analysisResult = data;
+                    updateProgress(100);
+                    
+                    processBtn.classList.remove('disabled');
+                    showWarning('Анализ завершен. Нажмите "Обработать"');
+                } else {
+                    throw new Error(data.error || 'Ошибка при анализе');
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Ошибка при анализе: ' + error.message);
+                
+                setTimeout(() => {
+                    frameProcessing.style.display = 'none';
+                    frameUpload.style.display = 'block';
+                    updateProgress(0);
+                }, 2000);
+            }
+        }
+        
+        // Обработчик кнопки "Обработать"
+        processBtn.addEventListener('click', () => {
+            if (!analysisResult) {
+                showError('Сначала выполните анализ');
+                return;
+            }
+            
+            frameProcessing.style.display = 'none';
+            frameResult.style.display = 'block';
+            
+            if (analysisResult.prediction === 'fake') {
+                resultFake.style.display = 'block';
+                resultReal.style.display = 'none';
+            } else {
+                resultReal.style.display = 'block';
+                resultFake.style.display = 'none';
+            }
+        });
+        
+        // Функция обновления прогресса
+        function updateProgress(percent) {
+            processingProgress.style.width = percent + '%';
+            spectrogramProgressBar.style.width = percent + '%';
+        }
+        
+        // Обработчик кнопки "Подробности"
+        document.querySelectorAll('.details-button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (analysisResult && analysisResult.probabilities) {
+                    const realProb = (analysisResult.probabilities.real * 100).toFixed(1);
+                    const fakeProb = (analysisResult.probabilities.fake * 100).toFixed(1);
+                    showWarning(`Реальный: ${realProb}%, Искусственный: ${fakeProb}%`);
+                }
+            });
+        });
+        
+        // Обработчик навигации
+        document.getElementById('homeNavBtn').addEventListener('click', () => {
+            frameResult.style.display = 'none';
+            frameProcessing.style.display = 'none';
+            frameUpload.style.display = 'block';
+            
+            // Останавливаем воспроизведение
+            if (isPlaying) {
+                audioPlayer.pause();
+            }
+            
+            // Очищаем URL
+            if (audioUrl) {
+                URL.revokeObjectURL(audioUrl);
+                audioUrl = null;
+            }
+            
+            // Сбрасываем состояние
+            selectedFile = null;
+            analysisResult = null;
+            fileNameDisplay.textContent = '';
+            analyzeBtn.style.display = 'none';
+            audioFileInput.value = '';
+            audioPlayer.src = '';
+            currentTimeDisplay.textContent = '0:00';
+            totalTimeDisplay.textContent = '0:00';
+            spectrogramProgressBar.style.width = '0%';
+            playPauseBtn.textContent = '▶️';
+            playPauseBtn.classList.remove('playing');
+            
+            processBtn.classList.remove('disabled');
+        });
+    </script>
+</body>
+</html>

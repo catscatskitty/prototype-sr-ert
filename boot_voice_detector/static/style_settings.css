@@ -1,0 +1,147 @@
+/* ========== ОБЩИЕ СТИЛИ ========== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Montserrat', sans-serif;
+    background: #1e1e1e;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* ========== ГЛАВНАЯ КАРТОЧКА ========== */
+.app {
+    width: 360px;
+    background: #C2B4DF;
+    border-radius: 60px;
+    padding: 45px;
+    display: flex;
+    flex-direction: column;
+    height: 825px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+/* ========== ШАПКА ========== */
+.header {
+    text-align: center;
+    margin-bottom: 62px;
+}
+
+.title {
+    font-size: 32px;
+    font-weight: 500;
+    color: #000000;
+    margin-bottom: 10px;
+}
+
+.subtitle {
+    font-size: 24px;
+    color: #000000;
+}
+
+/* ========== БЛОК СТАТУСОВ ========== */
+.status-block {
+    margin-bottom: 30px;
+}
+
+/* ========== БЛОК НАСТРОЕК ========== */
+.settings-block {
+    margin: 20px 0;
+    flex: 1;
+}
+
+.setting-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    margin-bottom: 24px;
+}
+
+.setting-label {
+    font-size: 18px;
+    color: #000000;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+.setting-select, .folder-select {
+    width: 100%;
+    background: #B9A9DA;
+    border: none;
+    border-radius: 20px;
+    padding: 12px 16px;
+    font-size: 18px;
+    color: #000000;
+    font-weight: 500;
+    font-family: 'Montserrat', sans-serif;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+
+.bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin-top: 130px;
+    padding-top: 20px;
+}
+
+.nav-item {
+    background: none;        /* убираем фон */
+    border: none;            /* убираем рамку */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.3s;
+    padding: 8px 16px;       /* добавил отступы для удобства клика */
+    font-family: 'Montserrat', sans-serif;
+}
+
+.nav-item.active {
+    opacity: 1;
+}
+
+.nav-item.active .nav-icon {
+    transform: scale(1.1);
+}
+
+.nav-icon {
+    font-size: 24px;
+    transition: transform 0.3s;
+}
+
+.nav-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #4a5568;
+}
+
+.nav-item.active .nav-label {
+    color: #667eea;
+    font-weight: 600;
+}
+
+.nav-item:hover {
+    opacity: 0.8;
+    cursor: pointer;
+}
+
+/* Адаптация для мобильных */
+@media (max-width: 600px) {
+    .setting-select, .folder-select {
+        min-width: 100px;
+        padding: 6px 12px;
+        font-size: 16px;
+    }
+}
